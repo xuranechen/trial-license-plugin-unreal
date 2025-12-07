@@ -1,0 +1,93 @@
+# Unreal Engine Plugin .gitignore
+
+# Binaries and executables
+Binaries/
+*.exe
+*.dll
+*.pdb
+*.lib
+*.exp
+*.so
+*.dylib
+*.app
+
+# Intermediate build files
+Intermediate/
+*.obj
+*.rsp
+*.dep.json
+*.old
+*.sup.*
+
+# Visual Studio files
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+*.aps
+*.pch
+*.vspscc
+*_i.c
+*_p.c
+*.ncb
+*.suo
+*.tlb
+*.tlh
+*.tmp
+*.tmp_proj
+*.log
+*.vspscc
+*.vssscc
+.builds
+*.pidb
+*.log
+*.svclog
+*.scc
+
+# Xcode files (if cross-platform)
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcuserstate
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+
+# Saved data
+Saved/
+
+# Plugins specific
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Logs
+*.log
+
+# Cache files
+.cache/
