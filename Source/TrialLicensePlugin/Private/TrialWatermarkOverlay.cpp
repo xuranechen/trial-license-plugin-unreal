@@ -1,13 +1,20 @@
 // Copyright 2025, Rune. All Rights Reserved.
 
+/**
+ * @brief 试用水印覆盖层
+ *
+ * 负责在游戏视口渲染水印、定期更新剩余时间，并在过期/验证失败时弹出对话框。
+ * 支持从项目设置读取参数，兼容UMG或Slate弹窗。
+ */
 #include "TrialWatermarkOverlay.h"
 #include "TrialLicenseSettings.h"
-#include "UTrialLicenseLibrary.h"
+#include "UTrialLicenseSubsystem.h"
 #include "FTrialLicenseInfo.h"
 #include "STrialExpiredWidget.h"
 #include "TrialExpiredWidgetBase.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+#include "Kismet/GameplayStatics.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/DateTime.h"
 #include "Misc/Paths.h"
@@ -32,12 +39,54 @@ static float GWatermarkTileSpacingX = 0.f; // 0 = 自动调整
 static float GWatermarkTileSpacingY = 300.f;
 static float GWatermarkVerticalOffset = 0.f;
 
+// 辅助函数：获取试用许可证子系统 (水印覆盖层版本)
+/**
+ * @brief 获取试用许可证子系统（覆盖层版本）
+ *
+ * 优先从当前播放世界的GameInstance获取，若不可用则退回从GEngine的GameViewport获取。
+ *
+ * @return 子系统指针，失败返回nullptr
+ */
+static UTrialLicenseSubsystem* GetTrialLicenseSubsystemForOverlay()
+{
+	if (UWorld* World = GEngine->GetCurrentPlayWorld())
+	{
+		if (UGameInstance* GameInstance = UGameplayStatics::GetGameInstance(World))
+		{
+			if (UTrialLicenseSubsystem* Subsystem = GameInstance->GetSubsystem<UTrialLicenseSubsystem>())
+			{
+				return Subsystem;
+			}
+		}
+	}
+	// 回退方案：尝试从GEngine获取
+	if (GEngine && GEngine->GameViewport)
+	{
+		if (UGameInstance* GameInstance = GEngine->GameViewport->GetGameInstance())
+		{
+			if (UTrialLicenseSubsystem* Subsystem = GameInstance->GetSubsystem<UTrialLicenseSubsystem>())
+			{
+				return Subsystem;
+			}
+		}
+	}
+	return nullptr;
+}
+
+/**
+ * @brief 单例访问
+ */
 FTrialWatermarkOverlay& FTrialWatermarkOverlay::Get()
 {
     static FTrialWatermarkOverlay Instance;
     return Instance;
 }
 
+/**
+ * @brief 初始化覆盖层
+ *
+ * 从项目设置或配置文件读取水印参数，附加到视口并启动定时刷新。
+ */
 void FTrialWatermarkOverlay::Initialize()
 {
     // Prefer project settings
@@ -87,6 +136,11 @@ void FTrialWatermarkOverlay::Initialize()
     }
 }
 
+/**
+ * @brief 停止覆盖层
+ *
+ * 移除定时器并从视口分离。
+ */
 void FTrialWatermarkOverlay::Shutdown()
 {
     if (TickerHandle.IsValid())
@@ -97,6 +151,11 @@ void FTrialWatermarkOverlay::Shutdown()
     DetachFromViewport();
 }
 
+/**
+ * @brief 定时刷新
+ *
+ * 维护水印显示、更新文本，并周期检测许可证过期状态。
+ */
 bool FTrialWatermarkOverlay::Tick(float /*DeltaTime*/)
 {
     if (!bEnabled)
@@ -123,26 +182,29 @@ bool FTrialWatermarkOverlay::Tick(float /*DeltaTime*/)
 
         if (!CachedLicenseKey.IsEmpty() && !CachedPassPhrase.IsEmpty())
         {
-            const float RemainingTime = UTrialLicenseLibrary::GetTrialRemainingTime(CachedLicenseKey, CachedPassPhrase);
-            const FTrialLicenseInfo Info = UTrialLicenseLibrary::ParseLicenseKey(CachedLicenseKey, CachedPassPhrase);
+            if (UTrialLicenseSubsystem* Subsystem = GetTrialLicenseSubsystemForOverlay())
+            {
+                const float RemainingTime = Subsystem->GetTrialRemainingTime(CachedLicenseKey, CachedPassPhrase);
+                const FTrialLicenseInfo Info = Subsystem->ParseLicenseKey(CachedLicenseKey, CachedPassPhrase);
 
-            // 如果试用时间已耗尽（且不是永久授权）
-            if (!Info.bPerpetual && RemainingTime <= 0.f)
-            {
-                ShowExpiredDialog(
-                    TEXT("您的试用期已到期，请联系开发者获取正式许可证。\n\nYour trial period has expired. Please contact the developer for a full license."),
-                    RemainingTime,
-                    Info.bPerpetual
-                );
-            }
-            // 如果证书验证失败
-            else if (!UTrialLicenseLibrary::ValidateLicense(CachedLicenseKey, CachedPassPhrase))
-            {
-                ShowExpiredDialog(
-                    TEXT("许可证验证失败，可能是设备不匹配或证书已被篡改。\n\nLicense validation failed. Device mismatch or certificate tampering detected."),
-                    RemainingTime,
-                    Info.bPerpetual
-                );
+                // 如果试用时间已耗尽（且不是永久授权）
+                if (!Info.bPerpetual && RemainingTime <= 0.f)
+                {
+                    ShowExpiredDialog(
+                        TEXT("您的试用期已到期，请联系开发者获取正式许可证。\n\nYour trial period has expired. Please contact the developer for a full license."),
+                        RemainingTime,
+                        Info.bPerpetual
+                    );
+                }
+                // 如果证书验证失败
+                else if (!Subsystem->ValidateLicense(CachedLicenseKey, CachedPassPhrase))
+                {
+                    ShowExpiredDialog(
+                        TEXT("许可证验证失败，可能是设备不匹配或证书已被篡改。\n\nLicense validation failed. Device mismatch or certificate tampering detected."),
+                        RemainingTime,
+                        Info.bPerpetual
+                    );
+                }
             }
         }
     }
@@ -150,6 +212,11 @@ bool FTrialWatermarkOverlay::Tick(float /*DeltaTime*/)
     return true;
 }
 
+/**
+ * @brief 尝试附加到游戏视口
+ *
+ * 构建水印Widget并添加到Viewport，未就绪时静默退出等待下一次尝试。
+ */
 void FTrialWatermarkOverlay::TryAttachToViewport()
 {
     if (bAttached)
@@ -210,6 +277,9 @@ void FTrialWatermarkOverlay::TryAttachToViewport()
     UE_LOG(LogTemp, Log, TEXT("[TrialWatermark] Successfully attached to viewport. Enabled=%d, Opacity=%.2f"), bEnabled, Opacity);
 }
 
+/**
+ * @brief 从视口移除水印Overlay
+ */
 void FTrialWatermarkOverlay::DetachFromViewport()
 {
     if (bAttached && GEngine && GEngine->GameViewport)
@@ -224,6 +294,11 @@ void FTrialWatermarkOverlay::DetachFromViewport()
     WatermarkWidget.Reset();
 }
 
+/**
+ * @brief 更新水印显示文本
+ *
+ * 根据许可证状态展示剩余时间、到期时间或提示未配置。
+ */
 void FTrialWatermarkOverlay::UpdateWatermarkText()
 {
     if (!WatermarkWidget.IsValid())
@@ -249,51 +324,57 @@ void FTrialWatermarkOverlay::UpdateWatermarkText()
         return;
     }
 
-    const FTrialLicenseInfo Info = UTrialLicenseLibrary::ParseLicenseKey(CachedLicenseKey, CachedPassPhrase);
-
-    if (Info.bPerpetual)
+    if (UTrialLicenseSubsystem* Subsystem = GetTrialLicenseSubsystemForOverlay())
     {
-        // 永久授权隐藏
-        if (RootOverlayWidget.IsValid())
+        const FTrialLicenseInfo Info = Subsystem->ParseLicenseKey(CachedLicenseKey, CachedPassPhrase);
+
+        if (Info.bPerpetual)
         {
-            RootOverlayWidget.Pin()->SetVisibility(EVisibility::Collapsed);
+            // 永久授权隐藏
+            if (RootOverlayWidget.IsValid())
+            {
+                RootOverlayWidget.Pin()->SetVisibility(EVisibility::Collapsed);
+            }
+            return;
         }
-        return;
-    }
-    else
-    {
-        if (RootOverlayWidget.IsValid())
+        else
         {
-            RootOverlayWidget.Pin()->SetVisibility(EVisibility::HitTestInvisible);
+            if (RootOverlayWidget.IsValid())
+            {
+                RootOverlayWidget.Pin()->SetVisibility(EVisibility::HitTestInvisible);
+            }
         }
-    }
 
-    const float RemainingSeconds = UTrialLicenseLibrary::GetTrialRemainingTime(CachedLicenseKey, CachedPassPhrase);
+        const float RemainingSeconds = Subsystem->GetTrialRemainingTime(CachedLicenseKey, CachedPassPhrase);
 
-    int32 RemainH = 0, RemainM = 0, RemainS = 0;
-    if (RemainingSeconds > 0.f)
-    {
-        RemainH = (int32)(RemainingSeconds / 3600.0f);
-        RemainM = (int32)((FMath::Fmod(RemainingSeconds, 3600.0f)) / 60.0f);
-        RemainS = (int32)FMath::Fmod(RemainingSeconds, 60.0f);
-    }
+        int32 RemainH = 0, RemainM = 0, RemainS = 0;
+        if (RemainingSeconds > 0.f)
+        {
+            RemainH = (int32)(RemainingSeconds / 3600.0f);
+            RemainM = (int32)((FMath::Fmod(RemainingSeconds, 3600.0f)) / 60.0f);
+            RemainS = (int32)FMath::Fmod(RemainingSeconds, 60.0f);
+        }
 
-    const FString ExpireStr = Info.ExpireTime.ToString(TEXT("%Y-%m-%d %H:%M:%S"));
-    FString RemainStr;
-    if (RemainingSeconds < 0.f)
-    {
-        RemainStr = TEXT("无限制");
-    }
-    else
-    {
-        RemainStr = FString::Printf(TEXT("%02d:%02d:%02d"), RemainH, RemainM, RemainS);
-    }
+        const FString ExpireStr = Info.ExpireTime.ToString(TEXT("%Y-%m-%d %H:%M:%S"));
+        FString RemainStr;
+        if (RemainingSeconds < 0.f)
+        {
+            RemainStr = TEXT("无限制");
+        }
+        else
+        {
+            RemainStr = FString::Printf(TEXT("%02d:%02d:%02d"), RemainH, RemainM, RemainS);
+        }
 
-    const FString Text = FString::Printf(TEXT("%s | 剩余: %s | 到期: %s"), *DisplayBase, *RemainStr, *ExpireStr);
-    WatermarkWidget.Pin()->SetText(FText::FromString(Text));
-    UE_LOG(LogTemp, Verbose, TEXT("[TrialWatermark] Text updated: %s"), *Text);
+        const FString Text = FString::Printf(TEXT("%s | 剩余: %s | 到期: %s"), *DisplayBase, *RemainStr, *ExpireStr);
+        WatermarkWidget.Pin()->SetText(FText::FromString(Text));
+        UE_LOG(LogTemp, Verbose, TEXT("[TrialWatermark] Text updated: %s"), *Text);
+    }
 }
 
+/**
+ * @brief 设置水印启用状态
+ */
 void FTrialWatermarkOverlay::SetEnabled(bool bInEnabled)
 {
     bEnabled = bInEnabled;
@@ -313,11 +394,17 @@ void FTrialWatermarkOverlay::SetEnabled(bool bInEnabled)
     }
 }
 
+/**
+ * @brief 设置水印基础文本
+ */
 void FTrialWatermarkOverlay::SetBaseText(const FString& InText)
 {
     BaseText = InText;
 }
 
+/**
+ * @brief 设置水印旋转角度
+ */
 void FTrialWatermarkOverlay::SetAngle(float InAngleDegrees)
 {
     AngleDegrees = InAngleDegrees;
@@ -327,6 +414,11 @@ void FTrialWatermarkOverlay::SetAngle(float InAngleDegrees)
     }
 }
 
+/**
+ * @brief 设置水印平铺间距
+ *
+ * 可分别指定X/Y方向间距。
+ */
 void FTrialWatermarkOverlay::SetTileSpacing(float InTileSpacingX, float InTileSpacingY)
 {
     TileSpacingX = InTileSpacingX;
@@ -337,6 +429,9 @@ void FTrialWatermarkOverlay::SetTileSpacing(float InTileSpacingX, float InTileSp
     }
 }
 
+/**
+ * @brief 设置水印垂直偏移
+ */
 void FTrialWatermarkOverlay::SetVerticalOffset(float InVerticalOffset)
 {
     VerticalOffset = InVerticalOffset;
@@ -346,6 +441,9 @@ void FTrialWatermarkOverlay::SetVerticalOffset(float InVerticalOffset)
     }
 }
 
+/**
+ * @brief 设置水印不透明度
+ */
 void FTrialWatermarkOverlay::SetOpacity(float InOpacity)
 {
     Opacity = InOpacity;
@@ -355,6 +453,9 @@ void FTrialWatermarkOverlay::SetOpacity(float InOpacity)
     }
 }
 
+/**
+ * @brief 设置水印字体大小
+ */
 void FTrialWatermarkOverlay::SetFontSize(int32 InFontSize)
 {
     FontSize = InFontSize;
@@ -364,6 +465,11 @@ void FTrialWatermarkOverlay::SetFontSize(int32 InFontSize)
     }
 }
 
+/**
+ * @brief 显示过期弹窗
+ *
+ * 根据设置选择UMG或Slate实现，避免重复弹出。
+ */
 void FTrialWatermarkOverlay::ShowExpiredDialog(const FString& Reason, float RemainingTime, bool bIsPerpetual)
 {
     // 避免重复弹出

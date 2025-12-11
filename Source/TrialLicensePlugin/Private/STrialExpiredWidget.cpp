@@ -1,7 +1,13 @@
 // Copyright 2025, Rune. All Rights Reserved.
 
+/**
+ * @brief 试用过期弹窗（Slate版）
+ *
+ * 默认的试用过期提示界面，提供标题、信息、试用请求展示与复制，
+ * 以及关闭/退出按钮。可在项目中直接使用或派生自定义样式。
+ */
 #include "STrialExpiredWidget.h"
-#include "UTrialLicenseLibrary.h"
+#include "UTrialLicenseSubsystem.h"
 #include "TrialLicenseSettings.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SBorder.h"
@@ -14,7 +20,49 @@
 #include "Misc/App.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/PlatformApplicationMisc.h"
+#include "Engine/Engine.h"
+#include "Kismet/GameplayStatics.h"
 
+// 辅助函数：获取试用许可证子系统 (Slate版本)
+/**
+ * @brief 获取试用许可证子系统（Slate版本）
+ *
+ * 优先从当前播放世界的GameInstance中获取子系统，
+ * 若不可用则退回从GEngine的GameViewport获取。失败则返回nullptr。
+ *
+ * @return 子系统指针，获取失败返回nullptr
+ */
+static UTrialLicenseSubsystem* GetTrialLicenseSubsystemForSlate()
+{
+	if (UWorld* World = GEngine->GetCurrentPlayWorld())
+	{
+		if (UGameInstance* GameInstance = UGameplayStatics::GetGameInstance(World))
+		{
+			if (UTrialLicenseSubsystem* Subsystem = GameInstance->GetSubsystem<UTrialLicenseSubsystem>())
+			{
+				return Subsystem;
+			}
+		}
+	}
+	// 回退方案：尝试从GEngine获取
+	if (GEngine && GEngine->GameViewport)
+	{
+		if (UGameInstance* GameInstance = GEngine->GameViewport->GetGameInstance())
+		{
+			if (UTrialLicenseSubsystem* Subsystem = GameInstance->GetSubsystem<UTrialLicenseSubsystem>())
+			{
+				return Subsystem;
+			}
+		}
+	}
+	return nullptr;
+}
+
+/**
+ * @brief 构建过期弹窗Widget
+ *
+ * 保存入参并设置根部件。
+ */
 void STrialExpiredWidget::Construct(const FArguments& InArgs)
 {
     ExpireReason = InArgs._ExpireReason;
@@ -27,6 +75,11 @@ void STrialExpiredWidget::Construct(const FArguments& InArgs)
     ];
 }
 
+/**
+ * @brief 构建弹窗主体内容
+ *
+ * 默认实现：包含标题、信息区域、试用请求信息和按钮栏。
+ */
 TSharedRef<SWidget> STrialExpiredWidget::GetContent()
 {
     // 默认UI实现：包含试用请求信息的弹窗布局
@@ -132,6 +185,11 @@ TSharedRef<SWidget> STrialExpiredWidget::GetContent()
         ];
 }
 
+/**
+ * @brief 关闭按钮回调
+ *
+ * 默认行为：销毁所属窗口，子类可重写。
+ */
 FReply STrialExpiredWidget::OnCloseClicked()
 {
     // 默认实现：关闭弹窗
@@ -144,6 +202,11 @@ FReply STrialExpiredWidget::OnCloseClicked()
     return FReply::Handled();
 }
 
+/**
+ * @brief 退出按钮回调
+ *
+ * 默认行为：请求退出应用，子类可重写。
+ */
 FReply STrialExpiredWidget::OnQuitClicked()
 {
     // 默认实现：退出应用
@@ -152,16 +215,25 @@ FReply STrialExpiredWidget::OnQuitClicked()
     return FReply::Handled();
 }
 
+/**
+ * @brief 更新过期原因
+ */
 void STrialExpiredWidget::SetExpireReason(const FString& InReason)
 {
     ExpireReason = InReason;
 }
 
+/**
+ * @brief 更新剩余时间（秒）
+ */
 void STrialExpiredWidget::SetRemainingTime(float InSeconds)
 {
     RemainingTime = InSeconds;
 }
 
+/**
+ * @brief 获取弹窗标题文本
+ */
 FText STrialExpiredWidget::GetTitleText() const
 {
     if (bIsPerpetual)
@@ -178,6 +250,9 @@ FText STrialExpiredWidget::GetTitleText() const
     }
 }
 
+/**
+ * @brief 获取主要提示信息
+ */
 FText STrialExpiredWidget::GetMessageText() const
 {
     if (!ExpireReason.IsEmpty())
@@ -205,16 +280,27 @@ FText STrialExpiredWidget::GetMessageText() const
     }
 }
 
+/**
+ * @brief 获取关闭按钮文本
+ */
 FText STrialExpiredWidget::GetCloseButtonText() const
 {
     return FText::FromString(TEXT("关闭 | Close"));
 }
 
+/**
+ * @brief 获取退出按钮文本
+ */
 FText STrialExpiredWidget::GetQuitButtonText() const
 {
     return FText::FromString(TEXT("退出应用 | Quit"));
 }
 
+/**
+ * @brief 复制试用请求按钮回调
+ *
+ * 生成试用请求并写入系统剪贴板。
+ */
 FReply STrialExpiredWidget::OnCopyTrialRequestClicked()
 {
     // 复制试用请求到剪贴板
@@ -228,16 +314,31 @@ FReply STrialExpiredWidget::OnCopyTrialRequestClicked()
     return FReply::Handled();
 }
 
+/**
+ * @brief 获取“复制请求”按钮文本
+ */
 FText STrialExpiredWidget::GetCopyButtonText() const
 {
     return FText::FromString(TEXT("复制请求 | Copy Request"));
 }
 
+/**
+ * @brief 获取试用请求信息文本
+ *
+ * 包含项目ID、机器ID、试用请求加密串及说明。
+ */
 FText STrialExpiredWidget::GetTrialRequestInfo() const
 {
-    const FString MachineID = UTrialLicenseLibrary::GetMachineID();
+    FString MachineID;
+    FString TrialRequest;
+
+    if (UTrialLicenseSubsystem* Subsystem = GetTrialLicenseSubsystemForSlate())
+    {
+        MachineID = Subsystem->GetMachineID();
+        TrialRequest = Subsystem->GenerateTrialRequest();
+    }
+
     const FString ProjectID = FApp::GetProjectName();
-    const FString TrialRequest = GenerateTrialRequestString();
 
     FString InfoText = FString::Printf(
         TEXT("项目ID | Project ID:\n%s\n\n机器ID | Machine ID:\n%s\n\n试用请求 | Trial Request:\n%s\n\n"),
@@ -245,15 +346,24 @@ FText STrialExpiredWidget::GetTrialRequestInfo() const
         *MachineID,
         *TrialRequest
     );
-    
+
     InfoText += TEXT("说明：请将上述\"试用请求\"发送给开发者以获取许可证密钥。\n");
     InfoText += TEXT("Note: Send the above \"Trial Request\" to the developer to obtain a license key.");
 
     return FText::FromString(InfoText);
 }
 
+/**
+ * @brief 生成试用请求加密字符串
+ *
+ * 调用子系统生成，失败返回空字符串。
+ */
 FString STrialExpiredWidget::GenerateTrialRequestString() const
 {
     // GenerateTrialRequest 不需要参数，它会自动从设置中读取
-    return UTrialLicenseLibrary::GenerateTrialRequest();
+    if (UTrialLicenseSubsystem* Subsystem = GetTrialLicenseSubsystemForSlate())
+    {
+        return Subsystem->GenerateTrialRequest();
+    }
+    return FString();
 }

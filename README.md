@@ -1,6 +1,6 @@
 # Trial License Plugin 使用说明
 
-轻量、可扩展的试用/授权管理插件。支持项目绑定、设备绑定、永久授权、时间篡改检测与本地加密存储，提供完善的蓝图与 C++ 接口。
+轻量、可扩展的试用/授权管理插件。基于UE5子系统架构，支持项目绑定、设备绑定、永久授权、时间篡改检测、本地加密存储、试用水印显示，提供完善的蓝图与 C++ 接口。
 
 ---
 
@@ -49,6 +49,8 @@ TimeGuardKey=YourStrongTimeGuardKeyHere
 - 永久授权：支持生成永久授权（不受到期时间与时长限制）
 - 防篡改检测：记录上次会话结束时间，发现系统时间倒退即告警
 - 本地加密存储：试用数据、时间防篡改数据均以 AES 封装并带 MAC 校验
+- 试用水印：支持在游戏界面显示试用版水印，可自定义文本、样式和布局
+- 过期提醒：自动显示许可证过期对话框，提供用户友好的提醒
 
 ---
 
@@ -138,13 +140,59 @@ float SecondsLeft = UTrialLicenseLibrary::GetTrialRemainingTime(TrialKey, Pass);
 
 ---
 
+## 子系统架构
+
+插件基于UE5子系统架构设计，主要通过 `UTrialLicenseSubsystem` 管理所有功能。子系统自动管理生命周期，提供更好的状态封装和测试友好性。
+
+### 获取子系统实例（蓝图）
+
+在蓝图中使用 `Get Game Instance Subsystem` 节点获取 `Trial License Subsystem` 实例：
+
+1. 右键搜索 "Get Game Instance Subsystem"
+2. 选择 "Trial License Subsystem"
+3. 连接到后续操作
+
+### 获取子系统实例（C++）
+
+```cpp
+#include "UTrialLicenseSubsystem.h"
+
+// 获取子系统实例
+UTrialLicenseSubsystem* TrialSubsystem = UGameInstance::GetSubsystem<UTrialLicenseSubsystem>(GetGameInstance());
+```
+
 ## 蓝图使用
 
-- 启用插件后，在蓝图中搜索节点：
+### 许可证管理节点
+
+- **许可证生成与验证**：
   - Generate License Key（包含 TargetMachineID 与 bPerpetual）
   - Parse License Key / Validate License / Get Trial Remaining Time
+  - Generate Trial Request / Parse Trial Request
+
+- **设备与数据管理**：
   - Get Machine ID / Get Used Time / Reset Trial Data / Has System Time Tampered
-- 注意：更新版本后，生成节点签名已变化，旧蓝图需重新连线。
+  - End Trial Session And Persist
+
+### 水印显示节点
+
+- **水印控制**：
+  - Set Watermark Enabled / Get Watermark Enabled
+  - Set Watermark Text / Get Watermark Text
+  - Set Watermark Angle / Get Watermark Angle
+  - Set Watermark Opacity / Get Watermark Opacity
+  - Set Watermark Font Size / Get Watermark Font Size
+  - Set Watermark Tile Spacing / Set Watermark Tile Spacing XY
+  - Get Watermark Tile Spacing / Get Watermark Tile Spacing X / Get Watermark Tile Spacing Y
+
+- **配置应用**：
+  - Apply Watermark From Project Settings
+
+### 对话框节点
+
+- Show Expired Dialog（显示许可证过期提醒对话框）
+
+注意：更新版本后，生成节点签名已变化，旧蓝图需重新连线。
 
 ---
 
@@ -258,6 +306,77 @@ TimeGuardKey=YourStrongTimeGuardKeyHere
 - 启动时读取上次会话结束时间 `LastSessionEnd` 与当前系统时间对比。
 - 如当前时间早于 `LastSessionEnd` → 判定为“时间被篡改”，`ValidateLicense()` 将返回失败。
 - 首次运行无文件时会写入初始守护点，后续参与对比。
+
+---
+
+## 试用水印功能说明
+
+插件提供内置的试用水印显示功能，用于在试用版中显示水印提醒用户当前为试用状态。
+
+### 水印特性
+
+- **自动显示**：许可证验证失败时自动显示水印
+- **自定义样式**：支持自定义水印文本、角度、不透明度、字体大小
+- **平铺布局**：水印可平铺显示在整个界面上
+- **性能优化**：使用UMG实现，渲染效率高
+- **配置驱动**：支持从项目设置自动应用配置
+
+### 水印参数说明
+
+- **文本 (Text)**：显示的水印内容，默认 "TRIAL VERSION"
+- **角度 (Angle)**：水印旋转角度（度），默认 45°
+- **不透明度 (Opacity)**：水印透明度，0.0-1.0，默认 0.3
+- **字体大小 (Font Size)**：水印字体大小（像素），默认 24
+- **平铺间距 (Tile Spacing)**：水印之间的间距，可分别设置X/Y方向
+
+### 使用方法
+
+#### 蓝图中控制水印
+
+```blueprint
+// 启用水印
+Set Watermark Enabled (true)
+
+// 设置水印文本
+Set Watermark Text ("试用版 - 请购买正版")
+
+// 设置水印样式
+Set Watermark Angle (30.0)
+Set Watermark Opacity (0.5)
+Set Watermark Font Size (32)
+
+// 设置平铺间距
+Set Watermark Tile Spacing XY (200.0, 150.0)
+```
+
+#### C++中控制水印
+
+```cpp
+// 获取子系统
+UTrialLicenseSubsystem* Subsystem = UGameInstance::GetSubsystem<UTrialLicenseSubsystem>(GetGameInstance());
+
+// 控制水印
+Subsystem->SetWatermarkEnabled(true);
+Subsystem->SetWatermarkText(TEXT("试用版"));
+Subsystem->SetWatermarkOpacity(0.4f);
+Subsystem->SetWatermarkFontSize(28);
+```
+
+### 水印显示逻辑
+
+- 许可证验证成功时，水印自动隐藏
+- 许可证验证失败时，水印自动显示
+- 可通过API手动控制水印显示状态
+- 水印显示不影响游戏交互
+
+### 项目设置集成
+
+插件提供项目设置页面，可在编辑器中配置水印默认参数：
+
+1. 打开 `Edit > Project Settings`
+2. 搜索 "Trial License"
+3. 配置水印相关设置
+4. 调用 `Apply Watermark From Project Settings` 应用配置
 
 ---
 

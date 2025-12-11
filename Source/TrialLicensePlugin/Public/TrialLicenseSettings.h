@@ -6,11 +6,23 @@
 #include "Engine/DeveloperSettings.h"
 #include "TrialLicenseSettings.generated.h"
 
+/**
+ * @brief 试用许可证插件设置类
+ *
+ * 该类提供了试用许可证插件的所有可配置选项，包括水印显示设置、
+ * 许可证配置、过期提示设置等。所有设置都会保存到项目配置文件中，
+ * 可以在编辑器的项目设置界面中进行配置。
+ */
 UCLASS(Config=Game, DefaultConfig)
 class TRIALLICENSEPLUGIN_API UTrialLicenseSettings : public UDeveloperSettings
 {
     GENERATED_BODY()
 public:
+    /**
+     * @brief 构造函数，初始化默认设置值
+     *
+     * 设置所有配置项的默认值，确保插件在首次使用时具有合理的默认配置。
+     */
     UTrialLicenseSettings();
 
     UPROPERTY(EditAnywhere, Config, Category="Watermark", meta=(DisplayName="启用水印 | Enable Watermark", ToolTip="是否在视口显示试用水印 | Whether to display the trial watermark in the viewport"))
@@ -67,11 +79,42 @@ public:
     UPROPERTY(EditAnywhere, Config, Category="Watermark", meta=(DisplayName="仅显示图片 | Image Only", ToolTip="仅显示图片水印，不显示文本 | Show only image watermark without text"))
     bool bWatermarkImageOnly;
 
+    /**
+     * @brief 获取设置分类名称
+     *
+     * 返回在项目设置界面中显示的设置分类名称。
+     *
+     * @return 设置分类名称
+     */
     virtual FName GetCategoryName() const override;
+
+    /**
+     * @brief 获取设置节标题文本
+     *
+     * 返回在项目设置界面中显示的节标题文本。
+     *
+     * @return 节标题文本
+     */
     virtual FText GetSectionText() const override;
+
+    /**
+     * @brief 获取设置节描述文本
+     *
+     * 返回在项目设置界面中显示的节描述文本，用于说明该设置节的功能。
+     *
+     * @return 节描述文本
+     */
     virtual FText GetSectionDescription() const override;
 
 #if WITH_EDITOR
+    /**
+     * @brief 属性编辑后回调
+     *
+     * 当用户在编辑器中修改设置属性时，此方法会被调用。
+     * 可以在此方法中实现属性变更后的响应逻辑，如实时更新水印显示等。
+     *
+     * @param PropertyChangedEvent 属性变更事件信息
+     */
     virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
 };

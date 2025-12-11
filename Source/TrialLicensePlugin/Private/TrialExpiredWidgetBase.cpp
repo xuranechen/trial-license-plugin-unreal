@@ -1,13 +1,59 @@
 // Copyright 2025, Rune. All Rights Reserved.
 
+/**
+ * @brief 试用过期弹窗基类（UMG）
+ *
+ * 提供UMG版本的默认过期弹窗逻辑：标题、提示信息、剩余时间格式化、
+ * 复制试用请求等，可在蓝图或C++中派生自定义UI。
+ */
 #include "TrialExpiredWidgetBase.h"
-#include "UTrialLicenseLibrary.h"
+#include "UTrialLicenseSubsystem.h"
 #include "TrialLicenseSettings.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "Misc/App.h"
+#include "Engine/Engine.h"
 
+// 辅助函数：获取试用许可证子系统
+/**
+ * @brief 获取试用许可证子系统实例
+ *
+ * 优先从当前播放世界的GameInstance获取，若不可用则尝试从GEngine->GameViewport获取。
+ *
+ * @return 子系统指针，失败返回nullptr
+ */
+static UTrialLicenseSubsystem* GetTrialLicenseSubsystem()
+{
+	if (UWorld* World = GEngine->GetCurrentPlayWorld())
+	{
+		if (UGameInstance* GameInstance = UGameplayStatics::GetGameInstance(World))
+		{
+			if (UTrialLicenseSubsystem* Subsystem = GameInstance->GetSubsystem<UTrialLicenseSubsystem>())
+			{
+				return Subsystem;
+			}
+		}
+	}
+	// 回退方案：尝试从GEngine获取
+	if (GEngine && GEngine->GameViewport)
+	{
+		if (UGameInstance* GameInstance = GEngine->GameViewport->GetGameInstance())
+		{
+			if (UTrialLicenseSubsystem* Subsystem = GameInstance->GetSubsystem<UTrialLicenseSubsystem>())
+			{
+				return Subsystem;
+			}
+		}
+	}
+	return nullptr;
+}
+
+/**
+ * @brief 初始化过期Widget
+ *
+ * 保存过期原因、剩余时间及是否永久授权，并触发蓝图事件。
+ */
 void UTrialExpiredWidgetBase::InitializeExpiredWidget(const FString& InReason, float InRemainingTime, bool bInIsPerpetual)
 {
     ExpireReason = InReason;
@@ -18,18 +64,27 @@ void UTrialExpiredWidgetBase::InitializeExpiredWidget(const FString& InReason, f
     OnExpiredWidgetInitialized();
 }
 
+/**
+ * @brief 关闭弹窗
+ */
 void UTrialExpiredWidgetBase::CloseDialog()
 {
     // 从父窗口移除
     RemoveFromParent();
 }
 
+/**
+ * @brief 退出应用
+ */
 void UTrialExpiredWidgetBase::QuitApplication()
 {
     // 退出应用
     UKismetSystemLibrary::QuitGame(this, nullptr, EQuitPreference::Quit, false);
 }
 
+/**
+ * @brief 获取标题文本（可在蓝图重写）
+ */
 FText UTrialExpiredWidgetBase::GetTitleText_Implementation() const
 {
     if (bIsPerpetual)
@@ -46,6 +101,9 @@ FText UTrialExpiredWidgetBase::GetTitleText_Implementation() const
     }
 }
 
+/**
+ * @brief 获取提示信息文本（可在蓝图重写）
+ */
 FText UTrialExpiredWidgetBase::GetMessageText_Implementation() const
 {
     if (!ExpireReason.IsEmpty())
@@ -67,16 +125,25 @@ FText UTrialExpiredWidgetBase::GetMessageText_Implementation() const
     }
 }
 
+/**
+ * @brief 获取关闭按钮文本（可在蓝图重写）
+ */
 FText UTrialExpiredWidgetBase::GetCloseButtonText_Implementation() const
 {
     return FText::FromString(TEXT("关闭 | Close"));
 }
 
+/**
+ * @brief 获取退出按钮文本（可在蓝图重写）
+ */
 FText UTrialExpiredWidgetBase::GetQuitButtonText_Implementation() const
 {
     return FText::FromString(TEXT("退出应用 | Quit"));
 }
 
+/**
+ * @brief 格式化剩余时间文本
+ */
 FText UTrialExpiredWidgetBase::GetFormattedRemainingTime() const
 {
     const int32 Hours = FMath::FloorToInt(RemainingTime / 3600.f);
@@ -88,6 +155,9 @@ FText UTrialExpiredWidgetBase::GetFormattedRemainingTime() const
     ));
 }
 
+/**
+ * @brief 复制试用请求到剪贴板
+ */
 void UTrialExpiredWidgetBase::CopyTrialRequestToClipboard()
 {
     const FString TrialRequest = GenerateTrialRequestString();
@@ -99,22 +169,46 @@ void UTrialExpiredWidgetBase::CopyTrialRequestToClipboard()
     }
 }
 
+/**
+ * @brief 生成试用请求加密字符串
+ *
+ * 从子系统获取，失败返回空字符串。
+ */
 FString UTrialExpiredWidgetBase::GenerateTrialRequestString()
 {
     // GenerateTrialRequest 不需要参数，它会自动从设置中读取
-    return UTrialLicenseLibrary::GenerateTrialRequest();
+    if (UTrialLicenseSubsystem* Subsystem = GetTrialLicenseSubsystem())
+    {
+        return Subsystem->GenerateTrialRequest();
+    }
+    return FString();
 }
 
+/**
+ * @brief 获取当前机器ID
+ */
 FString UTrialExpiredWidgetBase::GetMachineID() const
 {
-    return UTrialLicenseLibrary::GetMachineID();
+    if (UTrialLicenseSubsystem* Subsystem = GetTrialLicenseSubsystem())
+    {
+        return Subsystem->GetMachineID();
+    }
+    return FString();
 }
 
+/**
+ * @brief 获取项目ID（项目名）
+ */
 FString UTrialExpiredWidgetBase::GetProjectID() const
 {
     return FApp::GetProjectName();
 }
 
+/**
+ * @brief 组合试用请求信息文本
+ *
+ * 包含项目ID、机器ID、试用请求加密串及说明。
+ */
 FText UTrialExpiredWidgetBase::GetTrialRequestInfo() const
 {
     const FString MachineID = GetMachineID();
