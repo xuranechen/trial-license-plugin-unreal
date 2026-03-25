@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>许可证管理系统 - 管理后台</title>
+    <link rel="stylesheet" href="/static/css/common.css" />
+    <link rel="stylesheet" href="/static/css/admin.css" />
+  </head>
+  <body>
+    <!-- 登录页面 -->
+    <div id="loginPage" class="auth-screen admin-auth-screen">
+      <div class="auth-shell">
+        <section class="auth-brand-panel">
+          <h2>许可证管理系统</h2>
+          <p>安全、稳定、可审计的授权管理后台</p>
+          <div class="auth-feature-list">
+            <span>统一应用配置</span>
+            <span>许可证全生命周期管理</span>
+            <span>订单与许可证统一管理</span>
+          </div>
+        </section>
+        <section class="auth-form-panel login-form">
+          <h1>管理员登录</h1>
+          <p class="text-center" style="color: var(--text-muted); margin-bottom: var(--spacing-xl); font-size: var(--font-size-sm);">仅限管理员账号访问</p>
+          <div id="loginError" class="alert alert-danger hidden"></div>
+          <form id="loginForm">
+            <div class="form-group">
+              <label class="form-label">管理员账号</label>
+              <input type="text" class="form-control" id="username" placeholder="请输入管理员用户名或邮箱" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label">密码</label>
+              <input type="password" class="form-control" id="password" placeholder="请输入密码" required />
+            </div>
+            <button type="submit" class="btn btn-primary w-full">登录</button>
+          </form>
+        </section>
+      </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div id="mainPage" class="hidden">
+      <div class="container">
+        <header class="admin-header">
+          <div>
+            <h1>许可证管理系统</h1>
+            <p style="margin-top: var(--spacing-sm); opacity: 0.9">管理后台</p>
+          </div>
+        </header>
+
+        <div class="admin-workspace">
+          <aside class="tabs admin-sidebar">
+            <button class="tab active" onclick="switchTab('dashboard')">仪表盘</button>
+            <button class="tab" onclick="switchTab('applications')">应用管理</button>
+            <button class="tab" onclick="switchTab('licenses')">许可证</button>
+            <button class="tab" onclick="switchTab('orders')">订单</button>
+            <button class="tab" onclick="switchTab('users')">用户</button>
+            <button class="tab" onclick="switchTab('systemConfig')">系统配置</button>
+            <div class="admin-sidebar-user user-info">
+              <span id="userDisplay"></span>
+              <button class="btn btn-secondary" onclick="showProfileModal()">账户设置</button>
+              <button class="btn btn-danger" onclick="logout()">退出登录</button>
+            </div>
+          </aside>
+
+          <div class="content">
+          <!-- 仪表盘 -->
+          <div id="dashboardTab">
+            <div class="card-header">
+              <div><h2 class="card-title">数据概览</h2><p class="card-subtitle">实时统计数据和系统状态</p></div>
+            </div>
+            <div class="stats-grid">
+              <div class="stat-card primary"><div class="stat-label">总用户数</div><div class="stat-value" id="totalUsers">-</div><div class="stat-change positive"><span>↑</span> 今日新增 <span id="todayUsers">0</span></div></div>
+              <div class="stat-card success"><div class="stat-label">总许可证</div><div class="stat-value" id="totalLicenses">-</div><div class="stat-change positive"><span>↑</span> 激活率 <span id="activeRate">0</span>%</div></div>
+              <div class="stat-card warning"><div class="stat-label">总订单</div><div class="stat-value" id="totalOrders">-</div><div class="stat-change positive"><span>↑</span> 今日订单 <span id="todayOrders">0</span></div></div>
+              <div class="stat-card danger"><div class="stat-label">总收入</div><div class="stat-value" id="totalRevenue">-</div><div class="stat-change positive"><span>↑</span> 今日收入 ¥<span id="todayRevenue">0</span></div></div>
+            </div>
+            <div class="loading" id="dashboardLoading"><div class="loading-spinner"></div><p>正在加载统计数据...</p></div>
+          </div>
+
+          <!-- 应用管理 -->
+          <div id="applicationsTab" class="hidden">
+            <div class="card-header"><div><h2 class="card-title">应用管理</h2><p class="card-subtitle">管理所有应用和项目配置</p></div><div class="btn-group"><button class="btn btn-success" onclick="showCreateApplication()">创建应用</button><button class="btn btn-primary" onclick="refreshApplications()">刷新</button></div></div>
+            <div class="search-bar"><input type="text" class="search-input" id="applicationSearch" placeholder="搜索应用名称或项目ID..." /><button class="btn btn-primary" onclick="searchApplications()">搜索</button></div>
+            <div id="applicationsList"><div class="loading"><div class="loading-spinner"></div><p>正在加载应用数据...</p></div></div>
+          </div>
+
+          <!-- 许可证 -->
+          <div id="licensesTab" class="hidden">
+            <div class="card-header"><div><h2 class="card-title">许可证管理</h2><p class="card-subtitle">查看和管理所有许可证</p></div><div class="btn-group"><button class="btn btn-primary" onclick="refreshLicenses()">刷新</button></div></div>
+            <div class="search-bar"><input type="text" class="search-input" id="licenseSearch" placeholder="搜索许可证密钥、项目ID或设备ID..." /><button class="btn btn-primary" onclick="searchLicenses()">搜索</button></div>
+            <div class="filters"><select class="filter-select" id="licenseTypeFilter"><option value="">所有类型</option><option value="trial">试用版</option><option value="daily">天卡</option><option value="weekly">周卡</option><option value="monthly">月卡</option><option value="quarterly">季卡</option><option value="yearly">年卡</option><option value="perpetual">永久授权</option></select><select class="filter-select" id="licenseStatusFilter"><option value="">所有状态</option><option value="active">正常</option><option value="expired">已过期</option><option value="revoked">已撤销</option></select><button class="btn btn-secondary" onclick="clearLicenseFilters()">清除筛选</button></div>
+            <div id="licensesList"><div class="loading"><div class="loading-spinner"></div><p>正在加载许可证数据...</p></div></div>
+          </div>
+
+          <!-- 订单 -->
+          <div id="ordersTab" class="hidden">
+            <div class="card-header"><div><h2 class="card-title">订单管理</h2><p class="card-subtitle">查看所有订单和支付状态</p></div><button class="btn btn-primary" onclick="refreshOrders()">刷新</button></div>
+            <div class="search-bar"><input type="text" class="search-input" id="orderSearch" placeholder="搜索订单号、用户名或邮箱..." /><button class="btn btn-primary" onclick="searchOrders()">搜索</button></div>
+            <div class="filters"><select class="filter-select" id="orderStatusFilter"><option value="">所有状态</option><option value="pending">待支付</option><option value="paid">已支付</option><option value="expired">已过期</option><option value="cancelled">已取消</option></select></div>
+            <div id="ordersList"><div class="loading"><div class="loading-spinner"></div><p>正在加载订单数据...</p></div></div>
+          </div>
+
+          <!-- 用户 -->
+          <div id="usersTab" class="hidden">
+            <div class="card-header"><div><h2 class="card-title">用户管理</h2><p class="card-subtitle">管理系统用户和权限</p></div><button class="btn btn-primary" onclick="refreshUsers()">刷新</button></div>
+            <div class="search-bar"><input type="text" class="search-input" id="userSearch" placeholder="搜索用户名、邮箱或公司..." /><button class="btn btn-primary" onclick="searchUsers()">搜索</button></div>
+            <div class="filters"><select class="filter-select" id="userRoleFilter"><option value="">所有角色</option><option value="admin">管理员</option><option value="user">普通用户</option></select><select class="filter-select" id="userStatusFilter"><option value="">所有状态</option><option value="active">激活</option><option value="inactive">禁用</option></select></div>
+            <div id="usersList"><div class="loading"><div class="loading-spinner"></div><p>正在加载用户数据...</p></div></div>
+          </div>
+
+          <div id="userDetailTab" class="hidden">
+            <div class="card-header"><div><h2 class="card-title">用户详情</h2><p class="card-subtitle">查看用户统计并直接下发许可证或调整试用权益</p></div><div class="btn-group"><button class="btn btn-secondary" onclick="backToUsers()">返回用户列表</button><button class="btn btn-primary" onclick="refreshUserDetail()">刷新</button></div></div>
+            <div id="userDetailContent"><div class="loading"><div class="loading-spinner"></div><p>正在加载用户详情...</p></div></div>
+          </div>
+
+          <div id="systemConfigTab" class="hidden">
+            <div class="card-header"><div><h2 class="card-title">系统配置</h2><p class="card-subtitle">配置 SMTP 邮件服务和支付通道密钥</p></div><button class="btn btn-primary" onclick="refreshSystemConfig()">刷新</button></div>
+            <div class="system-config-grid">
+              <div class="card system-config-card">
+                <div id="smtpConfigError" class="alert alert-danger hidden"></div>
+                <div id="smtpConfigSuccess" class="alert alert-success hidden"></div>
+                <form id="smtpConfigForm">
+                <h3 class="card-title" style="margin-bottom: 8px;">邮件配置</h3>
+                <p class="card-subtitle" style="margin-bottom: 16px;">用于许可证激活、支付成功等邮件发送</p>
+                <div class="form-group"><label class="form-label"><input type="checkbox" id="smtpEnabled" /> 启用 SMTP</label></div>
+                <div class="form-group"><label class="form-label">SMTP 服务器</label><input type="text" class="form-control" id="smtpServer" placeholder="smtp.example.com" /></div>
+                <div class="form-group"><label class="form-label">SMTP 端口</label><input type="number" class="form-control" id="smtpPort" min="1" placeholder="587" /></div>
+                <div class="form-group"><label class="form-label"><input type="checkbox" id="smtpUseTls" /> 使用 TLS</label></div>
+                <div class="form-group"><label class="form-label">SMTP 用户名</label><input type="text" class="form-control" id="smtpUsername" placeholder="邮箱账号" /></div>
+                <div class="form-group"><label class="form-label">SMTP 密码</label><input type="password" class="form-control" id="smtpPassword" placeholder="应用专用密码或 SMTP 密码" /></div>
+                <div class="form-group"><label class="form-label">发件邮箱</label><input type="email" class="form-control" id="fromEmail" placeholder="noreply@example.com" /></div>
+                <div class="form-group"><label class="form-label">发件人名称</label><input type="text" class="form-control" id="fromName" placeholder="License Service" /></div>
+                <div class="btn-group"><button type="submit" class="btn btn-primary">保存邮件配置</button></div>
+                </form>
+              </div>
+
+              <div class="card system-config-card">
+                <div id="paymentConfigError" class="alert alert-danger hidden"></div>
+                <div id="paymentConfigSuccess" class="alert alert-success hidden"></div>
+                <form id="paymentConfigForm">
+                <h3 class="card-title" style="margin-bottom: 8px;">支付通道配置</h3>
+                <p class="card-subtitle" style="margin-bottom: 16px;">按通道分别配置密钥与开关</p>
+                <h4 class="system-config-section-title">Stripe</h4>
+                <div class="form-group"><label class="form-label"><input type="checkbox" id="stripeEnabled" /> 启用 Stripe</label></div>
+                <div class="form-group"><label class="form-label">Secret Key</label><input type="text" class="form-control" id="stripeSecretKey" placeholder="sk_live_xxx" /></div>
+                <div class="form-group"><label class="form-label">Publishable Key</label><input type="text" class="form-control" id="stripePublishableKey" placeholder="pk_live_xxx" /></div>
+
+                <h4 class="system-config-section-title">支付宝</h4>
+                <div class="form-group"><label class="form-label"><input type="checkbox" id="alipayEnabled" /> 启用支付宝</label></div>
+                <div class="form-group"><label class="form-label">App ID</label><input type="text" class="form-control" id="alipayAppId" /></div>
+                <div class="form-group"><label class="form-label">应用私钥</label><textarea class="form-control" id="alipayPrivateKey" rows="5"></textarea></div>
+                <div class="form-group"><label class="form-label">支付宝公钥</label><textarea class="form-control" id="alipayPublicKey" rows="5"></textarea></div>
+
+                <h4 class="system-config-section-title">微信支付</h4>
+                <div class="form-group"><label class="form-label"><input type="checkbox" id="wechatEnabled" /> 启用微信支付</label></div>
+                <div class="form-group"><label class="form-label">App ID</label><input type="text" class="form-control" id="wechatAppId" /></div>
+                <div class="form-group"><label class="form-label">商户号</label><input type="text" class="form-control" id="wechatMchId" /></div>
+                <div class="form-group"><label class="form-label">API Key</label><input type="text" class="form-control" id="wechatApiKey" /></div>
+
+                <div class="btn-group"><button type="submit" class="btn btn-primary">保存支付配置</button></div>
+                </form>
+              </div>
+            </div>
+          </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 账户设置模态框 -->
+    <div id="profileModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header"><h2 class="modal-title">账户设置</h2><button class="modal-close" onclick="closeProfileModal()">&times;</button></div>
+        <div class="modal-body">
+          <div id="profileError" class="alert alert-danger hidden"></div>
+          <div id="profileSuccess" class="alert alert-success hidden"></div>
+          <form id="profileForm" style="margin-bottom: var(--spacing-2xl)">
+            <h3 style="margin-bottom: var(--spacing-lg); color: var(--text-secondary);">个人信息</h3>
+            <div class="form-group"><label class="form-label">用户名</label><input type="text" class="form-control" id="profileUsername" disabled style="background: var(--bg-tertiary)" /></div>
+            <div class="form-group"><label class="form-label">邮箱</label><input type="email" class="form-control" id="profileEmail" placeholder="请输入邮箱" /></div>
+            <div class="form-group"><label class="form-label">全名</label><input type="text" class="form-control" id="profileFullName" placeholder="请输入全名（可选）" /></div>
+            <div class="form-group"><label class="form-label">公司</label><input type="text" class="form-control" id="profileCompany" placeholder="请输入公司名称（可选）" /></div>
+            <button type="submit" class="btn btn-primary w-full">保存信息</button>
+          </form>
+          <form id="passwordForm">
+            <h3 style="margin-bottom: var(--spacing-lg); color: var(--text-secondary);">修改密码</h3>
+            <div class="form-group"><label class="form-label">当前密码</label><input type="password" class="form-control" id="oldPassword" placeholder="请输入当前密码" required /></div>
+            <div class="form-group"><label class="form-label">新密码</label><input type="password" class="form-control" id="newPassword" placeholder="请输入新密码（至少6个字符）" required minlength="6" /></div>
+            <div class="form-group"><label class="form-label">确认新密码</label><input type="password" class="form-control" id="confirmPassword" placeholder="请再次输入新密码" required minlength="6" /></div>
+            <button type="submit" class="btn btn-warning w-full">修改密码</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- 应用管理模态框 -->
+    <div id="applicationModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header"><h2 class="modal-title" id="applicationModalTitle">创建应用</h2><button class="modal-close" onclick="closeApplicationModal()">&times;</button></div>
+        <div class="modal-body">
+          <div id="applicationError" class="alert alert-danger hidden"></div>
+          <div id="applicationSuccess" class="alert alert-success hidden"></div>
+          <form id="applicationForm" onsubmit="submitApplicationForm(event)">
+            <input type="hidden" id="applicationId" />
+            <div class="form-group"><label class="form-label">项目ID *</label><input type="text" class="form-control" id="projectId" placeholder="例如：MyGame" required /><small style="color: var(--text-muted); font-size: var(--font-size-xs);">唯一标识符，创建后不可修改</small></div>
+            <div class="form-group"><label class="form-label">项目名称 *</label><input type="text" class="form-control" id="projectName" placeholder="例如：我的游戏" required /></div>
+            <div class="form-group"><label class="form-label">描述</label><input type="text" class="form-control" id="projectDescription" placeholder="项目描述（可选）" /></div>
+            <div class="form-group"><label class="form-label">加密密钥 *</label><input type="text" class="form-control" id="projectPassphrase" placeholder="用于许可证加密的密钥" required /><small style="color: var(--text-muted); font-size: var(--font-size-xs);">请妥善保管，丢失后无法恢复</small></div>
+            <div class="form-group"><label class="form-label">试用时长（小时）*</label><input type="number" class="form-control" id="trialDurationHours" placeholder="720" min="1" value="720" required /><small style="color: var(--text-muted); font-size: var(--font-size-xs);">默认试用许可证的有效时长（720小时=30天）</small></div>
+            <div class="form-group"><label class="form-label">试用申请次数限制 *</label><input type="number" class="form-control" id="trialRequestLimit" placeholder="1" min="1" value="1" required /><small style="color: var(--text-muted); font-size: var(--font-size-xs);">每个应用、每台设备最多可申请试用许可证的次数</small></div>
+            <div class="form-group"><label class="form-label">天卡价格（元）*</label><input type="number" class="form-control" id="dailyPrice" min="0" step="0.01" value="9.90" required /></div>
+            <div class="form-group"><label class="form-label">周卡价格（元）*</label><input type="number" class="form-control" id="weeklyPrice" min="0" step="0.01" value="49.90" required /></div>
+            <div class="form-group"><label class="form-label">月卡价格（元）*</label><input type="number" class="form-control" id="monthlyPrice" min="0" step="0.01" value="149.90" required /></div>
+            <div class="form-group"><label class="form-label">季卡价格（元）*</label><input type="number" class="form-control" id="quarterlyPrice" min="0" step="0.01" value="399.90" required /></div>
+            <div class="form-group"><label class="form-label">年卡价格（元）*</label><input type="number" class="form-control" id="yearlyPrice" min="0" step="0.01" value="999.90" required /></div>
+            <div class="form-group"><label class="form-label">永久授权价格（元）*</label><input type="number" class="form-control" id="perpetualPrice" min="0" step="0.01" value="2999.00" required /></div>
+            <div class="btn-group"><button type="submit" class="btn btn-primary">保存</button><button type="button" class="btn btn-secondary" onclick="closeApplicationModal()">取消</button></div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div id="issueLicenseModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header"><h2 class="modal-title">下发许可证</h2><button class="modal-close" onclick="closeIssueLicenseModal()">&times;</button></div>
+        <div class="modal-body">
+          <div id="issueLicenseError" class="alert alert-danger hidden"></div>
+          <div class="alert alert-info" style="margin-bottom: 16px;">为该用户在指定应用和设备下直接写入许可证，保存后会立即在门户页生效。</div>
+          <form id="issueLicenseForm">
+            <div class="form-group"><label class="form-label">应用</label><select class="form-control" id="issueProjectId" required><option value="">请选择应用</option></select></div>
+            <div class="form-group"><label class="form-label">设备ID</label><select class="form-control" id="issueMachineSelect"><option value="">从现有设备选择（可选）</option></select></div>
+            <div class="form-group"><label class="form-label">或手动输入设备ID</label><input class="form-control" id="issueMachineId" placeholder="指定设备ID" required /></div>
+            <div class="form-group"><label class="form-label">许可证类型</label><select class="form-control" id="issueLicenseType" required><option value="trial">试用版</option><option value="daily">天卡</option><option value="weekly">周卡</option><option value="monthly">月卡</option><option value="quarterly">季卡</option><option value="yearly">年卡</option><option value="perpetual">永久授权</option></select></div>
+            <div class="form-group" id="issueDurationGroup"><label class="form-label">试用时长（小时）</label><input type="number" min="1" step="1" class="form-control" id="issueDurationHours" placeholder="留空则使用默认试用时长" /></div>
+            <div class="btn-group"><button class="btn btn-primary" type="submit">下发许可证</button><button class="btn btn-secondary" type="button" onclick="closeIssueLicenseModal()">取消</button></div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div id="benefitModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header"><h2 class="modal-title">试用权益调整</h2><button class="modal-close" onclick="closeBenefitModal()">&times;</button></div>
+        <div class="modal-body">
+          <div id="benefitError" class="alert alert-danger hidden"></div>
+          <div class="alert alert-info" style="margin-bottom: 16px;">按应用增加该用户的额外试用次数和时长，门户申请试用时会直接叠加生效。</div>
+          <form id="benefitForm">
+            <div class="form-group"><label class="form-label">应用</label><select class="form-control" id="benefitProjectId" required><option value="">请选择应用</option></select></div>
+            <div class="form-group"><label class="form-label">额外试用次数</label><input type="number" min="0" class="form-control" id="benefitTrialRequests" value="0" required /></div>
+            <div class="form-group"><label class="form-label">额外试用时长（小时）</label><input type="number" min="0" step="1" class="form-control" id="benefitTrialHours" value="0" required /></div>
+            <div class="btn-group"><button class="btn btn-primary" type="submit">保存试用权益</button><button class="btn btn-secondary" type="button" onclick="closeBenefitModal()">取消</button></div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- JavaScript 模块 -->
+    <script src="/static/js/modal.js"></script>
+    <script src="/static/js/admin-api.js"></script>
+    <script src="/static/js/admin-auth.js"></script>
+    <script src="/static/js/admin-ui.js"></script>
+    <script src="/static/js/admin-dashboard.js"></script>
+    <script src="/static/js/admin-applications.js"></script>
+    <script src="/static/js/admin-licenses.js"></script>
+    <script src="/static/js/admin-orders.js"></script>
+    <script src="/static/js/admin-users.js"></script>
+    <script src="/static/js/admin-system-config.js"></script>
+    <script src="/static/js/admin-init.js"></script>
+  </body>
+</html>

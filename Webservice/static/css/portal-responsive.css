@@ -1,0 +1,96 @@
+/* 响应式设计 - portal.html */
+
+@media (max-width: 1024px) {
+  .auth-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    width: 100%;
+    padding: var(--spacing-xl) 0;
+  }
+
+  .nav-menu {
+    display: flex;
+    overflow-x: auto;
+    gap: var(--spacing-md);
+    padding: 0 var(--spacing-xl);
+    margin-top: var(--spacing-xl);
+  }
+
+  .nav-item {
+    flex-shrink: 0;
+    padding: var(--spacing-md) var(--spacing-lg);
+    white-space: nowrap;
+  }
+
+  .nav-item.active {
+    transform: translateX(0);
+  }
+
+  .main-content {
+    padding: var(--spacing-2xl);
+  }
+
+  .logout-btn {
+    position: static;
+    width: 100%;
+    margin: var(--spacing-xl);
+  }
+}
+
+@media (max-width: 768px) {
+  #loginPage,
+  #registerPage {
+    padding: var(--spacing-sm);
+  }
+
+  .logo h1 {
+    font-size: var(--font-size-3xl);
+  }
+
+  .content-header h2 {
+    font-size: var(--font-size-xl);
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .license-info,
+  .order-info {
+    grid-template-columns: 1fr;
+  }
+
+  .license-header,
+  .order-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .btn-group {
+    flex-direction: column;
+  }
+
+  .btn-group .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .logo h1 {
+    font-size: var(--font-size-2xl);
+  }
+
+  .main-content {
+    padding: var(--spacing-lg);
+  }
+
+  .card {
+    padding: var(--spacing-md);
+  }
+}

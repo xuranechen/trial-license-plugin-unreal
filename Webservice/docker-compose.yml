@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  # PostgreSQL数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: license_db
+    environment:
+      POSTGRES_USER: license_user
+      POSTGRES_PASSWORD: license_pass
+      POSTGRES_DB: license_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - license_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U license_user -d license_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI应用
+  api:
+    build: .
+    container_name: license_api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://license_user:license_pass@postgres:5432/license_db
+      DEBUG: "False"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    networks:
+      - license_network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+volumes:
+  postgres_data:
+
+networks:
+  license_network:
+    driver: bridge

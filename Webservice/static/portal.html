@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>许可证管理系统 - 门户</title>
+    <link rel="stylesheet" href="/static/css/common.css" />
+    <link rel="stylesheet" href="/static/css/portal.css" />
+    <link rel="stylesheet" href="/static/css/portal-dropdown-fix.css" />
+  </head>
+  <body>
+    <!-- 登录页面 -->
+    <div id="loginPage" class="container auth-page auth-screen">
+      <div class="auth-shell">
+        <section class="auth-brand-panel">
+          <h2>许可证管理系统</h2>
+          <p>用户门户 · 账号、许可证、订单一体化管理</p>
+          <div class="auth-feature-list">
+            <span>在线申请许可证</span>
+            <span>订单与许可证状态可视化</span>
+            <span>密钥信息安全留存</span>
+          </div>
+        </section>
+        <section class="auth-form-panel">
+          <div class="logo">
+            <h1>用户登录</h1>
+            <p>请输入账号信息继续</p>
+          </div>
+          <div id="loginMessage" class="alert alert-danger hidden"></div>
+          <form id="loginForm">
+            <div class="form-group">
+              <label class="form-label">用户名或邮箱</label>
+              <input
+                type="text"
+                class="form-control"
+                id="loginUsername"
+                placeholder="请输入用户名或邮箱"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label class="form-label">密码</label>
+              <input
+                type="password"
+                class="form-control"
+                id="loginPassword"
+                placeholder="请输入密码"
+                required
+              />
+            </div>
+            <button type="submit" class="btn btn-primary">登录</button>
+          </form>
+          <div class="switch-auth">
+            还没有账号？<a href="#" onclick="showRegister()">立即注册</a>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- 注册页面 -->
+    <div id="registerPage" class="container auth-page auth-screen hidden">
+      <div class="auth-shell">
+        <section class="auth-brand-panel">
+          <h2>创建门户账号</h2>
+          <p>注册后可申请、查看和管理个人许可证</p>
+          <div class="auth-feature-list">
+            <span>统一账号体系</span>
+            <span>许可证状态实时同步</span>
+            <span>支持多种许可证类型</span>
+          </div>
+        </section>
+        <section class="auth-form-panel">
+          <div class="logo">
+            <h1>用户注册</h1>
+            <p>创建新账号以访问用户门户</p>
+          </div>
+          <div id="registerMessage" class="alert alert-danger hidden"></div>
+          <div id="registerSuccess" class="alert alert-success hidden"></div>
+          <form id="registerForm">
+            <div class="form-group">
+              <label class="form-label">用户名</label>
+              <input
+                type="text"
+                class="form-control"
+                id="regUsername"
+                placeholder="3-20个字符"
+                required
+                minlength="3"
+                maxlength="20"
+              />
+            </div>
+            <div class="form-group">
+              <label class="form-label">邮箱</label>
+              <input
+                type="email"
+                class="form-control"
+                id="regEmail"
+                placeholder="请输入邮箱地址"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label class="form-label">密码</label>
+              <input
+                type="password"
+                class="form-control"
+                id="regPassword"
+                placeholder="至少6个字符"
+                required
+                minlength="6"
+              />
+            </div>
+            <div class="form-group">
+              <label class="form-label">确认密码</label>
+              <input
+                type="password"
+                class="form-control"
+                id="regPasswordConfirm"
+                placeholder="请再次输入密码"
+                required
+                minlength="6"
+              />
+            </div>
+            <button type="submit" class="btn btn-primary">注册</button>
+          </form>
+          <div class="switch-auth">
+            已有账号？<a href="#" onclick="showLogin()">返回登录</a>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- 用户中心 -->
+    <div id="dashboardPage" class="container hidden">
+      <header class="portal-header admin-header">
+        <div>
+          <h1>许可证管理系统</h1>
+          <p style="margin-top: var(--spacing-sm); opacity: 0.9">用户门户</p>
+        </div>
+      </header>
+      <div class="admin-workspace portal-workspace">
+        <aside class="tabs admin-sidebar portal-sidebar">
+          <button class="tab active" onclick="switchTab('profile')">个人信息</button>
+          <button class="tab" onclick="switchTab('licenses')">我的许可证</button>
+          <button class="tab" onclick="switchTab('orders')">订单记录</button>
+          <button class="tab" onclick="switchTab('apply')">申请许可证</button>
+          <button class="tab" onclick="switchTab('settings')">账号设置</button>
+          <div class="portal-sidebar-user user-info">
+            <span id="portalUserDisplay"></span>
+            <button class="btn btn-danger" onclick="logout()">退出登录</button>
+          </div>
+        </aside>
+
+        <div class="content portal-content">
+          <!-- 个人信息 -->
+          <div id="profileTab" class="tab-content">
+            <div class="card-header portal-section-header">
+              <div>
+                <h2 class="card-title">个人信息</h2>
+                <p class="card-subtitle">查看和管理您的个人资料</p>
+              </div>
+            </div>
+            <div class="card">
+              <h3 class="card-title">基本信息</h3>
+              <div class="info-grid">
+                <div class="info-item">
+                  <label>用户名</label>
+                  <div class="value" id="profileUsername">-</div>
+                </div>
+                <div class="info-item">
+                  <label>邮箱</label>
+                  <div class="value" id="profileEmail">-</div>
+                </div>
+                <div class="info-item">
+                  <label>姓名</label>
+                  <div class="value" id="profileFullName">未设置</div>
+                </div>
+                <div class="info-item">
+                  <label>公司</label>
+                  <div class="value" id="profileCompany">未设置</div>
+                </div>
+                <div class="info-item">
+                  <label>注册时间</label>
+                  <div class="value" id="profileCreatedAt">-</div>
+                </div>
+                <div class="info-item">
+                  <label>账号状态</label>
+                  <div class="value" id="profileStatus">-</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 我的许可证 -->
+          <div id="licensesTab" class="tab-content hidden">
+            <div class="card-header portal-section-header">
+              <div>
+                <h2 class="card-title">我的许可证</h2>
+                <p class="card-subtitle">管理您的所有许可证</p>
+              </div>
+            </div>
+            <div class="filters portal-license-filters">
+              <button class="btn btn-primary btn-sm portal-license-filter active" type="button" data-license-filter="active" onclick="setLicenseFilter('active')">有效许可证</button>
+              <button class="btn btn-secondary btn-sm portal-license-filter" type="button" data-license-filter="expired" onclick="setLicenseFilter('expired')">已过期许可证</button>
+              <button class="btn btn-secondary btn-sm portal-license-filter" type="button" data-license-filter="revoked" onclick="setLicenseFilter('revoked')">已撤销许可证</button>
+            </div>
+            <div id="licensesList" class="scroll-fade">
+              <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>正在加载许可证数据...</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 订单记录 -->
+          <div id="ordersTab" class="tab-content hidden">
+            <div class="card-header portal-section-header">
+              <div>
+                <h2 class="card-title">订单记录</h2>
+                <p class="card-subtitle">查看您的订单历史</p>
+              </div>
+            </div>
+            <div id="ordersList" class="scroll-fade">
+              <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>正在加载订单数据...</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 申请许可证 -->
+          <div id="applyTab" class="tab-content hidden">
+            <div class="card-header portal-section-header">
+              <div>
+                <h2 class="card-title">申请许可证</h2>
+                <p class="card-subtitle">填写信息申请新的许可证</p>
+              </div>
+            </div>
+            <div id="applyPanel" class="apply-form apply-form-scroll scroll-fade">
+              <div id="applyMessage" class="alert alert-danger hidden"></div>
+              <div id="applySuccess" class="alert alert-success hidden"></div>
+
+              <form id="applyForm">
+                <div class="form-group">
+                  <label class="form-label">选择项目 *</label>
+                  <select
+                    class="form-control"
+                    id="applyProjectName"
+                    required
+                    onchange="loadProjectPricing()"
+                  >
+                    <option value="">正在加载项目列表...</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">加密口令 *</label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="applyEncryptedToken"
+                    placeholder="请输入加密口令"
+                    oninput="checkTrialAvailability()"
+                    required
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">许可证类型 *</label>
+                  <div class="license-type-group">
+                    <label class="radio-option" data-license-type="trial">
+                      <input type="radio" name="licenseType" value="trial" checked onchange="updatePriceInfo()">
+                      <span class="radio-label">
+                        <strong>试用版</strong>
+                        <small>免费 · 72小时</small>
+                      </span>
+                    </label>
+                    <label class="radio-option" data-license-type="daily">
+                      <input type="radio" name="licenseType" value="daily" onchange="updatePriceInfo()">
+                      <span class="radio-label">
+                        <strong>天卡</strong>
+                        <small>¥9.90 · 1天</small>
+                      </span>
+                    </label>
+                    <label class="radio-option" data-license-type="weekly">
+                      <input type="radio" name="licenseType" value="weekly" onchange="updatePriceInfo()">
+                      <span class="radio-label">
+                        <strong>周卡</strong>
+                        <small>¥49.90 · 7天</small>
+                      </span>
+                    </label>
+                    <label class="radio-option" data-license-type="monthly">
+                      <input type="radio" name="licenseType" value="monthly" onchange="updatePriceInfo()">
+                      <span class="radio-label">
+                        <strong>月卡</strong>
+                        <small>¥149.90 · 30天</small>
+                      </span>
+                    </label>
+                    <label class="radio-option" data-license-type="quarterly">
+                      <input type="radio" name="licenseType" value="quarterly" onchange="updatePriceInfo()">
+                      <span class="radio-label">
+                        <strong>季卡</strong>
+                        <small>¥399.90 · 90天</small>
+                      </span>
+                    </label>
+                    <label class="radio-option" data-license-type="yearly">
+                      <input type="radio" name="licenseType" value="yearly" onchange="updatePriceInfo()">
+                      <span class="radio-label">
+                        <strong>年卡</strong>
+                        <small>¥999.90 · 365天</small>
+                      </span>
+                    </label>
+                    <label class="radio-option" data-license-type="perpetual">
+                      <input type="radio" name="licenseType" value="perpetual" onchange="updatePriceInfo()">
+                      <span class="radio-label">
+                        <strong>永久授权</strong>
+                        <small>¥2999.00 · 永久</small>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">邮箱地址（可选）</label>
+                  <input
+                    type="email"
+                    class="form-control"
+                    id="applyEmail"
+                    placeholder="接收许可证的邮箱地址（不填写则使用账户邮箱）"
+                  />
+                </div>
+
+                <div class="btn-group">
+                  <button type="submit" class="btn btn-primary">申请许可证</button>
+                  <button type="button" class="btn btn-secondary" onclick="resetApplyForm()">重置</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- 账号设置 -->
+          <div id="settingsTab" class="tab-content hidden">
+            <div class="card-header portal-section-header">
+              <div>
+                <h2 class="card-title">账号设置</h2>
+                <p class="card-subtitle">分开管理基本资料和登录密码</p>
+              </div>
+            </div>
+            <div class="settings-grid">
+              <div class="card settings-card">
+                <h3 class="card-title">基本信息</h3>
+                <div id="profileUpdateMessage" class="alert alert-danger hidden"></div>
+                <div id="profileUpdateSuccess" class="alert alert-success hidden"></div>
+                <form id="updateProfileForm">
+                  <div class="form-group">
+                    <label class="form-label">用户名</label>
+                    <input type="text" class="form-control" id="settingsUsername" disabled />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">邮箱</label>
+                    <input type="email" class="form-control" id="settingsEmail" required />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">姓名</label>
+                    <input type="text" class="form-control" id="settingsFullName" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">公司</label>
+                    <input type="text" class="form-control" id="settingsCompany" />
+                  </div>
+                  <button type="submit" class="btn btn-primary">保存基本信息</button>
+                </form>
+              </div>
+
+              <div class="card settings-card">
+                <h3 class="card-title">修改密码</h3>
+                <div id="passwordMessage" class="alert alert-danger hidden"></div>
+                <div id="passwordSuccess" class="alert alert-success hidden"></div>
+                <form id="changePasswordForm">
+                  <div class="form-group">
+                    <label class="form-label">当前密码</label>
+                    <input type="password" class="form-control" id="oldPassword" required />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">新密码</label>
+                    <input type="password" class="form-control" id="newPassword" required minlength="6" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">确认新密码</label>
+                    <input type="password" class="form-control" id="newPasswordConfirm" required minlength="6" />
+                  </div>
+                  <button type="submit" class="btn btn-primary">修改密码</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/js/modal.js"></script>
+    <script src="/static/js/portal-config.js"></script>
+    <script src="/static/js/portal-state.js"></script>
+    <script src="/static/js/portal-ui.js"></script>
+    <script src="/static/js/portal-auth.js"></script>
+    <script src="/static/js/portal-profile.js"></script>
+    <script src="/static/js/portal-licenses.js"></script>
+    <script src="/static/js/portal-apply.js"></script>
+    <script src="/static/js/portal-init.js"></script>
+  </body>
+</html>

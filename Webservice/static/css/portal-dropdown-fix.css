@@ -1,0 +1,161 @@
+/**
+ * Portal 页面下拉框修复样式
+ * 解决下拉框内容被遮挡的问题
+ */
+
+/* 确保申请表单容器不会裁剪下拉框 */
+.apply-form {
+    overflow: visible !important;
+    position: relative;
+    z-index: 1;
+}
+
+/* 确保表单组不会裁剪下拉框内容 */
+.apply-form .form-group {
+    overflow: visible !important;
+    position: relative;
+    z-index: 1;
+}
+
+/* 当下拉框打开时，提升容器的层级 */
+.apply-form .form-group:has(.custom-select.open) {
+    z-index: 9999 !important;
+}
+
+/* 确保主内容区域不会裁剪下拉框 */
+.main-content {
+    overflow: visible !important;
+}
+
+/* 确保标签页内容不会裁剪下拉框 */
+.tab-content {
+    overflow: visible !important;
+}
+
+/* 强化自定义下拉框在 portal 页面中的显示 */
+.apply-form .custom-select {
+    position: relative;
+    z-index: 1;
+}
+
+.apply-form .custom-select.open {
+    z-index: 9999 !important;
+}
+
+/* 确保下拉选项容器始终可见 */
+.apply-form .custom-select-options {
+    z-index: 10000 !important;
+}
+
+/* 使用 fixed 定位时的特殊处理 */
+.apply-form .custom-select-options.fixed-position {
+    position: fixed !important;
+    z-index: 10000 !important;
+    /* 确保边框和阴影正确显示 */
+    border: 2px solid var(--primary-color) !important;
+    box-shadow: 0 12px 32px rgba(0, 102, 204, 0.3), 0 8px 16px rgba(0, 0, 0, 0.2) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    /* 确保背景不透明 */
+    background: var(--bg-primary) !important;
+}
+
+/* 确保价格信息提示不会遮挡下拉框 */
+#priceInfo {
+    position: relative;
+    z-index: 1;
+}
+
+/* 确保按钮组不会遮挡下拉框 */
+.apply-form .btn-group {
+    position: relative;
+    z-index: 1;
+}
+
+/* 修复卡片内的下拉框 */
+.card {
+    overflow: visible !important;
+}
+
+.card:has(.custom-select.open) {
+    overflow: visible !important;
+    z-index: 9999 !important;
+}
+
+/* 确保内容头部不会遮挡下拉框 */
+.content-header {
+    position: relative;
+    z-index: 1;
+}
+
+/* 确保侧边栏不会遮挡下拉框 */
+.sidebar {
+    z-index: 100;
+}
+
+/* 确保主内容区域的层级高于侧边栏 */
+.main-content {
+    z-index: 101;
+    position: relative;
+}
+
+/* 确保退出登录按钮不会遮挡下拉框 */
+.logout-btn {
+    z-index: 102;
+}
+
+/* 增强下拉框选项的滚动条样式 */
+.apply-form .custom-select-options::-webkit-scrollbar {
+    width: 8px;
+}
+
+.apply-form .custom-select-options::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+}
+
+.apply-form .custom-select-options::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: var(--radius-sm);
+}
+
+.apply-form .custom-select-options::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-dark);
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .apply-form .custom-select-options.fixed-position {
+        max-width: calc(100vw - 2 * var(--spacing-lg));
+    }
+}
+
+@media (max-width: 480px) {
+    .apply-form .custom-select-options.fixed-position {
+        max-width: calc(100vw - 2 * var(--spacing-md));
+    }
+}
+
+/* 确保动画不会影响层级 */
+.apply-form .custom-select-options.show {
+    z-index: 10000 !important;
+}
+
+/* 修复许可证列表和订单列表中可能的类似问题 */
+#licensesList,
+#ordersList {
+    overflow: visible !important;
+    position: relative;
+}
+
+/* 确保空状态不会遮挡其他元素 */
+.empty-state {
+    position: relative;
+    z-index: 1;
+}
+
+/* 确保加载状态不会遮挡其他元素 */
+.loading {
+    position: relative;
+    z-index: 1;
+}
