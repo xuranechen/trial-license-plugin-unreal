@@ -134,7 +134,10 @@ const AdminUsers = {
         <td>${app.project_name}</td>
         <td>${app.license_count}</td>
         <td>${app.device_count}</td>
-        <td>${app.extra_trial_requests} 次 / ${app.extra_trial_duration_hours} 小时</td>
+        <td>
+          标准试用：+${app.extra_trial_requests} 次 / 单次 +${app.extra_trial_duration_hours} 小时<br>
+          免水印试用：${app.allow_no_watermark_trial ? "已开通" : "未开通"} / +${app.extra_no_watermark_trial_requests} 次
+        </td>
       </tr>
     `).join("") : '<tr><td colspan="4">暂无应用数据</td></tr>';
     const deviceRows = detail.devices.length ? detail.devices.map((device) => `
@@ -188,7 +191,7 @@ const AdminUsers = {
           </div>
         </div>
 
-        <div class="card section-card-apps"><div class="card-header compact-card-header"><div><h3 class="card-title">应用统计</h3><p class="card-subtitle">用户在每个应用下的许可证和试用权益情况</p></div><div class="btn-group"><button class="btn btn-primary btn-sm" type="button" onclick="openIssueLicenseModal()">下发许可证</button><button class="btn btn-secondary btn-sm" type="button" onclick="openBenefitModal()">试用权益调整</button></div></div><table class="mini-table"><thead><tr><th>应用</th><th>许可证</th><th>设备</th><th>试用权益</th></tr></thead><tbody>${appRows}</tbody></table></div>
+        <div class="card section-card-apps"><div class="card-header compact-card-header"><div><h3 class="card-title">应用统计</h3><p class="card-subtitle">用户在每个应用下的许可证和试用能力情况</p></div><div class="btn-group"><button class="btn btn-primary btn-sm" type="button" onclick="openIssueLicenseModal()">下发许可证</button><button class="btn btn-secondary btn-sm" type="button" onclick="openBenefitModal()">试用能力调整</button></div></div><table class="mini-table"><thead><tr><th>应用</th><th>许可证</th><th>设备</th><th>试用能力</th></tr></thead><tbody>${appRows}</tbody></table></div>
         <div class="card section-card-devices"><div class="card-header compact-card-header"><div><h3 class="card-title">设备统计</h3><p class="card-subtitle">该用户使用过的设备和覆盖应用情况</p></div></div><table class="mini-table"><thead><tr><th>设备ID</th><th>应用数</th><th>许可证</th><th>最近使用</th></tr></thead><tbody>${deviceRows}</tbody></table></div>
         <div class="card section-card-licenses"><div class="card-header compact-card-header"><div><h3 class="card-title">最近许可证</h3><p class="card-subtitle">最近生成或更新的许可证记录</p></div></div><table class="mini-table"><thead><tr><th>应用</th><th>设备</th><th>类型</th><th>状态</th></tr></thead><tbody>${licenseRows}</tbody></table></div>
       </div>`;
@@ -203,6 +206,7 @@ const AdminUsers = {
     document.getElementById("issueMachineId").value = "";
     document.getElementById("issueLicenseType").value = "trial";
     document.getElementById("issueDurationHours").value = "";
+    document.getElementById("issueShowWatermark").checked = true;
     this.toggleIssueDurationField();
     document.getElementById("issueLicenseError").classList.add("hidden");
   },
@@ -220,6 +224,8 @@ const AdminUsers = {
     select.innerHTML = `<option value="">请选择应用</option>${this.currentApplications.map((app) => `<option value="${app.project_id}">${app.project_name} (${app.project_id})</option>`).join("")}`;
     document.getElementById("benefitTrialRequests").value = 0;
     document.getElementById("benefitTrialHours").value = 0;
+    document.getElementById("benefitAllowNoWatermark").checked = false;
+    document.getElementById("benefitNoWatermarkRequests").value = 0;
     document.getElementById("benefitError").classList.add("hidden");
   },
 
@@ -240,6 +246,7 @@ const AdminUsers = {
         project_id: document.getElementById("issueProjectId").value,
         machine_id: document.getElementById("issueMachineId").value.trim(),
         license_type: document.getElementById("issueLicenseType").value,
+        show_watermark: document.getElementById("issueShowWatermark").checked,
         duration_hours: document.getElementById("issueLicenseType").value === "trial"
           ? Number(document.getElementById("issueDurationHours").value || 0) || null
           : null,
@@ -259,12 +266,14 @@ const AdminUsers = {
         project_id: document.getElementById("benefitProjectId").value,
         extra_trial_requests: Number(document.getElementById("benefitTrialRequests").value || 0),
         extra_trial_duration_hours: Number(document.getElementById("benefitTrialHours").value || 0),
+        allow_no_watermark_trial: document.getElementById("benefitAllowNoWatermark").checked,
+        extra_no_watermark_trial_requests: Number(document.getElementById("benefitNoWatermarkRequests").value || 0),
       });
-      AdminUI.showNotification("试用权益已更新", "success");
+      AdminUI.showNotification("试用能力已更新", "success");
       AdminUI.closeModal("benefitModal");
       this.loadDetailPage();
     } catch (error) {
-      AdminUI.showNotification(error.message || "更新试用权益失败", "error");
+      AdminUI.showNotification(error.message || "更新试用能力失败", "error");
     }
   }
 };

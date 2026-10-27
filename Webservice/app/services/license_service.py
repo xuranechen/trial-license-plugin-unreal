@@ -64,6 +64,13 @@ def get_effective_trial_policy(db: Session, user_id: str, app: Application) -> d
     benefit = get_user_trial_benefit(db, user_id, app.project_id)
     extra_requests = int(getattr(benefit, "extra_trial_requests", 0) or 0)
     extra_hours = float(getattr(benefit, "extra_trial_duration_hours", 0) or 0)
+    extra_no_watermark_requests = int(
+        getattr(benefit, "extra_no_watermark_trial_requests", 0) or 0
+    )
+    allow_no_watermark_trial = bool(
+        getattr(benefit, "allow_no_watermark_trial", False)
+        or extra_no_watermark_requests > 0
+    )
     return {
         "trial_request_limit": max(
             int(getattr(app, "trial_request_limit", 1) or 1) + extra_requests, 1
@@ -73,6 +80,9 @@ def get_effective_trial_policy(db: Session, user_id: str, app: Application) -> d
         ),
         "extra_trial_requests": extra_requests,
         "extra_trial_duration_hours": extra_hours,
+        "no_watermark_trial_request_limit": max(extra_no_watermark_requests, 0),
+        "extra_no_watermark_trial_requests": extra_no_watermark_requests,
+        "allow_no_watermark_trial": allow_no_watermark_trial,
     }
 
 
@@ -125,6 +135,7 @@ def generate_paid_license_for_order(db: Session, order: Order) -> License:
             project_id=app.project_id,
             machine_id=machine_id,
             is_perpetual=config["is_perpetual"],
+            show_watermark=False,
         )
     except Exception as exc:
         raise HTTPException(
@@ -144,6 +155,8 @@ def generate_paid_license_for_order(db: Session, order: Order) -> License:
         generate_time=generate_time,
         expiry_time=expiry_time,
         is_perpetual=config["is_perpetual"],
+        show_watermark=False,
+        uses_no_watermark_benefit=False,
         order_id=order.id,
     )
 

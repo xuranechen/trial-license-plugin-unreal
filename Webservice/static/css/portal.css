@@ -471,7 +471,7 @@ body {
 
 #licensesList .portal-license-table th:nth-child(2),
 #licensesList .portal-license-table td:nth-child(2) {
-  width: 19%;
+  width: 16%;
 }
 
 #licensesList .portal-license-table th:nth-child(3),
@@ -481,16 +481,20 @@ body {
 
 #licensesList .portal-license-table th:nth-child(4),
 #licensesList .portal-license-table td:nth-child(4) {
-  width: 16%;
+  width: 14%;
 }
 
 #licensesList .portal-license-table th:nth-child(5),
 #licensesList .portal-license-table td:nth-child(5) {
-  width: 10%;
+  width: 9%;
 }
 
 #licensesList .portal-license-table th:nth-child(6),
-#licensesList .portal-license-table td:nth-child(6),
+#licensesList .portal-license-table td:nth-child(6) {
+  width: 5%;
+  text-align: center;
+}
+
 #licensesList .portal-license-table th:nth-child(7),
 #licensesList .portal-license-table td:nth-child(7) {
   width: 13%;
@@ -503,7 +507,16 @@ body {
 
 #licensesList .portal-license-table th:nth-child(9),
 #licensesList .portal-license-table td:nth-child(9) {
-  width: 14%;
+  width: 8%;
+}
+
+#licensesList .portal-license-table th:nth-child(10),
+#licensesList .portal-license-table td:nth-child(10) {
+  width: 10%;
+}
+
+#licensesList .portal-license-table td:nth-child(6) .badge {
+  padding: 2px 6px;
 }
 
 .portal-license-filters {

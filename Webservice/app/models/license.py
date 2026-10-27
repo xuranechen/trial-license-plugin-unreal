@@ -12,8 +12,23 @@ class LicenseType(str, enum.Enum):
     """许可证类型枚举"""
 
     TRIAL = "trial"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+    QUARTERLY = "quarterly"
+    YEARLY = "yearly"
     PERPETUAL = "perpetual"
     SUBSCRIPTION = "subscription"
+
+    # 兼容历史数据（旧版本使用大写值）
+    LEGACY_TRIAL = "TRIAL"
+    LEGACY_DAILY = "DAILY"
+    LEGACY_WEEKLY = "WEEKLY"
+    LEGACY_MONTHLY = "MONTHLY"
+    LEGACY_QUARTERLY = "QUARTERLY"
+    LEGACY_YEARLY = "YEARLY"
+    LEGACY_PERPETUAL = "PERPETUAL"
+    LEGACY_SUBSCRIPTION = "SUBSCRIPTION"
 
 
 class License(Base):
@@ -28,11 +43,26 @@ class License(Base):
     user_id = Column(String(255), index=True, comment="用户ID")
     email = Column(String(255), comment="用户邮箱")
     company = Column(String(255), comment="公司名称")
-    license_type = Column(Enum(LicenseType), nullable=False, comment="许可证类型")
+    license_type = Column(
+        Enum(
+            LicenseType,
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+            native_enum=False,
+        ),
+        nullable=False,
+        comment="许可证类型",
+    )
     duration_hours = Column(Float, comment="时长（小时）")
     generate_time = Column(DateTime(timezone=True), nullable=False, comment="生成时间")
     expiry_time = Column(DateTime(timezone=True), comment="过期时间")
     is_perpetual = Column(Boolean, default=False, comment="是否永久许可证")
+    show_watermark = Column(Boolean, default=True, comment="是否显示水印")
+    uses_no_watermark_benefit = Column(
+        Boolean, default=False, comment="是否占用免水印试用权益"
+    )
+    counts_against_trial_limit = Column(
+        Boolean, default=True, comment="是否占用试用次数"
+    )
     is_expired = Column(Boolean, default=False, comment="是否已过期")
     is_revoked = Column(Boolean, default=False, comment="是否已撤销")
     revoke_reason = Column(Text, comment="撤销原因")

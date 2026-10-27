@@ -423,7 +423,7 @@ body {
 
 #licensesTab .license-table th:nth-child(2),
 #licensesTab .license-table td:nth-child(2) {
-  width: 15%;
+  width: 14%;
 }
 
 #licensesTab .license-table th:nth-child(3),
@@ -433,7 +433,7 @@ body {
 
 #licensesTab .license-table th:nth-child(4),
 #licensesTab .license-table td:nth-child(4) {
-  width: 12%;
+  width: 11%;
 }
 
 #licensesTab .license-table th:nth-child(5),
@@ -443,11 +443,9 @@ body {
 
 #licensesTab .license-table th:nth-child(6),
 #licensesTab .license-table td:nth-child(6) {
-  width: 8%;
+  width: 7%;
 }
 
-#licensesTab .license-table th:nth-child(7),
-#licensesTab .license-table td:nth-child(7),
 #licensesTab .license-table th:nth-child(8),
 #licensesTab .license-table td:nth-child(8) {
   width: 12%;
@@ -455,12 +453,27 @@ body {
 
 #licensesTab .license-table th:nth-child(9),
 #licensesTab .license-table td:nth-child(9) {
-  width: 8%;
+  width: 13%;
 }
 
 #licensesTab .license-table th:nth-child(10),
 #licensesTab .license-table td:nth-child(10) {
-  width: 10%;
+  width: 7%;
+}
+
+#licensesTab .license-table th:nth-child(11),
+#licensesTab .license-table td:nth-child(11) {
+  width: 8%;
+}
+
+#licensesTab .license-table th:nth-child(7),
+#licensesTab .license-table td:nth-child(7) {
+  width: 5%;
+  text-align: center;
+}
+
+#licensesTab .license-table td:nth-child(7) .badge {
+  padding: 2px 6px;
 }
 
 #licensesTab .ellipsis-cell {

@@ -1,6 +1,6 @@
 """用户应用权益模型"""
 
-from sqlalchemy import Column, String, Float, DateTime, UniqueConstraint
+from sqlalchemy import Boolean, Column, String, Float, DateTime, UniqueConstraint
 from sqlalchemy.sql import func
 
 from app.database import Base
@@ -20,6 +20,12 @@ class UserApplicationBenefit(Base):
     extra_trial_requests = Column(Float, default=0, comment="额外试用次数")
     extra_trial_duration_hours = Column(
         Float, default=0, comment="额外试用时长（小时）"
+    )
+    extra_no_watermark_trial_requests = Column(
+        Float, default=0, comment="额外免水印试用次数"
+    )
+    allow_no_watermark_trial = Column(
+        Boolean, default=False, comment="是否允许申请免水印试用"
     )
     created_at = Column(
         DateTime(timezone=True), server_default=func.now(), comment="创建时间"

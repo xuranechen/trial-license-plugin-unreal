@@ -32,11 +32,58 @@ const PortalApply = {
     });
   },
 
+  renderTrialAvailability(result = null) {
+    const trialOption = document.querySelector('.radio-option[data-license-type="trial"] .radio-label small');
+    if (!trialOption) return;
+
+    if (!result) {
+      const config = this.getLicenseConfig();
+      trialOption.textContent = config.trial.inlineText;
+      this.updateNoWatermarkOption(null);
+      return;
+    }
+
+    const durationText = `${Number(result.effective_trial_duration_hours || 0)}小时`;
+    const extraText = Number(result.extra_trial_duration_hours || 0) > 0
+      ? ` · 单次+${Number(result.extra_trial_duration_hours)}小时`
+      : "";
+    trialOption.textContent = result.allowed
+      ? `免费 · ${durationText} · 剩余${result.remaining_trial_requests}/${result.trial_request_limit}次${extraText}`
+      : `免费 · ${durationText} · 已用完(0/${result.trial_request_limit})${extraText}`;
+
+    this.updateNoWatermarkOption(result);
+  },
+
+  updateNoWatermarkOption(result = null) {
+    const group = document.getElementById("applyNoWatermarkGroup");
+    const checkbox = document.getElementById("applyRequestNoWatermark");
+    const hint = document.getElementById("applyNoWatermarkHint");
+    const selectedType = document.querySelector('input[name="licenseType"]:checked')?.value;
+    if (!group || !checkbox || !hint) return;
+
+    if (!result || !result.allow_no_watermark_trial || selectedType !== "trial") {
+      group.classList.add("hidden");
+      checkbox.checked = false;
+      hint.textContent = "免水印试用权益次数：0/0";
+      return;
+    }
+
+    group.classList.remove("hidden");
+    const remaining = Number(result.remaining_no_watermark_trial_requests || 0);
+    const limit = Number(result.no_watermark_trial_request_limit || 0);
+    hint.textContent = `免水印试用权益次数：${remaining}/${limit}`;
+    checkbox.disabled = remaining <= 0;
+    if (remaining <= 0) {
+      checkbox.checked = false;
+    }
+  },
+
   async checkTrialAvailability() {
     const projectId = document.getElementById("applyProjectName")?.value;
     const encryptedToken = document.getElementById("applyEncryptedToken")?.value.trim();
     const trialOption = document.querySelector('.radio-option[data-license-type="trial"] .radio-label small');
     if (!projectId || !encryptedToken || !trialOption) {
+      window.PortalState.currentTrialAvailability = null;
       this.renderLicenseTypeDetails();
       return;
     }
@@ -56,15 +103,16 @@ const PortalApply = {
           await window.PortalAuth.handleAuthFailure(response, "无法检查试用次数");
           return;
         }
+        window.PortalState.currentTrialAvailability = null;
         this.renderLicenseTypeDetails();
         return;
       }
 
       const result = await response.json();
-      trialOption.textContent = result.allowed
-        ? `免费 · 剩余${result.remaining_trial_requests}/${result.trial_request_limit}次`
-        : `免费 · 已用完(0/${result.trial_request_limit})`;
+      window.PortalState.currentTrialAvailability = result;
+      this.renderTrialAvailability(result);
     } catch (error) {
+      window.PortalState.currentTrialAvailability = null;
       this.renderLicenseTypeDetails();
     }
   },
@@ -78,6 +126,7 @@ const PortalApply = {
     if (!projectSelect) return;
 
     window.PortalState.currentProjectPricing = null;
+    window.PortalState.currentTrialAvailability = null;
     this.renderLicenseTypeDetails();
     projectSelect.innerHTML = '<option value="">正在加载项目列表...</option>';
     projectSelect.disabled = true;
@@ -128,9 +177,11 @@ const PortalApply = {
       projectSelect.selectedIndex = 0;
       projectSelect.disabled = false;
       window.PortalState.currentProjectPricing = null;
+      window.PortalState.currentTrialAvailability = null;
       this.renderLicenseTypeDetails();
     } catch (error) {
       window.PortalState.currentProjectPricing = null;
+      window.PortalState.currentTrialAvailability = null;
       this.renderLicenseTypeDetails();
       projectSelect.innerHTML = '<option value="">加载失败，请重试</option>';
       projectSelect.disabled = true;
@@ -145,12 +196,15 @@ const PortalApply = {
       this.checkTrialAvailability();
     } else {
       window.PortalState.currentProjectPricing = null;
+      window.PortalState.currentTrialAvailability = null;
       this.renderLicenseTypeDetails();
     }
   },
 
   updatePriceInfo() {
     this.renderLicenseTypeDetails();
+    this.renderTrialAvailability(window.PortalState.currentTrialAvailability || null);
+    this.updateNoWatermarkOption(window.PortalState.currentTrialAvailability || null);
   },
 
   async submit() {
@@ -159,6 +213,7 @@ const PortalApply = {
     const licenseTypeRadio = document.querySelector('input[name="licenseType"]:checked');
     const licenseType = licenseTypeRadio ? licenseTypeRadio.value : "";
     const email = document.getElementById("applyEmail").value.trim();
+    const requestNoWatermark = document.getElementById("applyRequestNoWatermark")?.checked || false;
 
     if (!projectId || !encryptedToken || !licenseType) {
       this.showApplyError("请填写所有必填字段（项目、加密口令、许可证类型）");
@@ -169,6 +224,7 @@ const PortalApply = {
       project_id: projectId,
       encrypted_token: encryptedToken,
       license_type: licenseType,
+      request_no_watermark: licenseType === "trial" ? requestNoWatermark : false,
     };
     if (email) {
       formData.email = email;
@@ -218,10 +274,19 @@ const PortalApply = {
     const remainingText = result.remaining_trial_requests == null || result.trial_request_limit == null
       ? "-"
       : `${result.remaining_trial_requests}/${result.trial_request_limit}`;
+    const noWatermarkRemainingText = result.remaining_no_watermark_trial_requests == null || result.no_watermark_trial_request_limit == null
+      ? "-"
+      : `${result.remaining_no_watermark_trial_requests}/${result.no_watermark_trial_request_limit}`;
+    const maskedLicenseKey = result.license_key
+      ? `${result.license_key.slice(0, 12)} ... ${result.license_key.slice(-12)}`
+      : "-";
     window.PortalUI.showDetail("许可证申请成功", [
       { label: "许可证类型", value: result.license_type || "trial" },
-      { label: "许可证密钥", value: result.license_key || "-" },
+      { label: "许可证密钥", value: maskedLicenseKey },
+      { label: "试用时长", value: result.duration_hours ? `${result.duration_hours} 小时` : "-" },
       { label: "剩余试用次数", value: remainingText },
+      { label: "免水印", value: result.show_watermark ? "否（有水印）" : "是（免水印）" },
+      { label: "剩余免水印次数", value: noWatermarkRemainingText },
       { label: "发送邮箱", value: emailMsg },
     ], [
       {
@@ -244,7 +309,9 @@ const PortalApply = {
   resetApplyForm() {
     document.getElementById("applyForm").reset();
     window.PortalState.currentProjectPricing = null;
+    window.PortalState.currentTrialAvailability = null;
     this.renderLicenseTypeDetails();
+    this.updateNoWatermarkOption(null);
     const container = this.getContainer();
     if (container) {
       container.scrollTop = 0;

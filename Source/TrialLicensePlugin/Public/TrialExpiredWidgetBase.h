@@ -45,15 +45,6 @@ public:
     void OnExpiredWidgetInitialized();
 
     /**
-     * @brief 蓝图事件：关闭按钮点击
-     *
-     * 当用户点击关闭按钮时，此事件会被触发。
-     * 可以在蓝图中重写此事件，实现自定义的关闭逻辑。
-     */
-    UFUNCTION(BlueprintImplementableEvent, Category = "Trial License", meta = (DisplayName = "On Close Clicked"))
-    void OnCloseClicked();
-
-    /**
      * @brief 蓝图事件：退出应用按钮点击
      *
      * 当用户点击退出应用按钮时，此事件会被触发。
@@ -61,6 +52,15 @@ public:
      */
     UFUNCTION(BlueprintImplementableEvent, Category = "Trial License", meta = (DisplayName = "On Quit Clicked"))
     void OnQuitClicked();
+
+    /**
+     * @brief 蓝图事件：许可证验证成功
+     *
+     * 当许可证验证成功时，此事件会被触发。
+     * 可以在蓝图中重写此事件，实现自定义的成功处理逻辑。
+     */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Trial License", meta = (DisplayName = "On License Validated"))
+    void OnLicenseValidated();
 
     /**
      * @brief 关闭弹窗
@@ -77,8 +77,10 @@ public:
      * 退出整个应用程序。
      * 可以在蓝图中调用此方法退出应用。
      */
-    UFUNCTION(BlueprintCallable, Category = "Trial License")
-    void QuitApplication();
+	UFUNCTION(BlueprintCallable, Category = "Trial License")
+	void QuitApplication();
+
+	virtual void NativeDestruct() override;
 
     /**
      * @brief 复制试用请求到剪贴板
@@ -89,6 +91,24 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Trial License")
     void CopyTrialRequestToClipboard();
 
+    UFUNCTION(BlueprintCallable, Category = "Trial License|File")
+    bool ExportTrialRequestToFile(const FString& FilePath);
+
+    UFUNCTION(BlueprintCallable, Category = "Trial License|File")
+    bool ExportTrialRequestWithDialog();
+
+    UFUNCTION(BlueprintCallable, Category = "Trial License|File")
+    bool ImportLicenseFromFile(const FString& FilePath);
+
+    UFUNCTION(BlueprintCallable, Category = "Trial License|File")
+    bool ImportLicenseWithDialog();
+
+    UFUNCTION(BlueprintPure, Category = "Trial License|File")
+    FText GetFileOperationStatusText() const;
+
+    UFUNCTION(BlueprintPure, Category = "Trial License|Watermark")
+    FText GetLicenseWatermarkStatusText() const;
+
     /**
      * @brief 生成试用请求字符串
      *
@@ -98,6 +118,37 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Trial License")
     FString GenerateTrialRequestString();
+
+    /**
+     * @brief 验证许可证密钥
+     *
+     * 验证用户输入的许可证密钥，如果验证成功则更新设置并触发成功事件。
+     *
+     * @param LicenseKey 用户输入的许可证密钥
+     * @return 验证是否成功
+     */
+    UFUNCTION(BlueprintCallable, Category = "Trial License")
+    bool ValidateLicenseKey(const FString& LicenseKey);
+
+    /**
+     * @brief 获取许可证验证状态消息
+     *
+     * 返回最后一次验证的状态消息（成功或失败信息）。
+     *
+     * @return 验证状态消息文本
+     */
+    UFUNCTION(BlueprintPure, Category = "Trial License")
+    FText GetValidationStatusText() const;
+
+    /**
+     * @brief 获取验证是否成功
+     *
+     * 返回最后一次验证是否成功的布尔值。
+     *
+     * @return true表示验证成功，false表示验证失败
+     */
+    UFUNCTION(BlueprintPure, Category = "Trial License")
+    bool IsValidationSuccessful() const;
 
 protected:
     /** @brief 过期原因文本 */
@@ -111,6 +162,21 @@ protected:
     /** @brief 是否为永久授权 */
     UPROPERTY(BlueprintReadOnly, Category = "Trial License")
     bool bIsPerpetual;
+
+    /** @brief 缓存的试用请求信息，避免每次 UI 刷新时重新生成 */
+    UPROPERTY(BlueprintReadOnly, Category = "Trial License")
+    FText CachedTrialRequestInfo;
+
+    /** @brief 验证状态消息 */
+    UPROPERTY(BlueprintReadOnly, Category = "Trial License")
+    FString ValidationStatusMessage;
+
+    /** @brief 验证是否成功 */
+    UPROPERTY(BlueprintReadOnly, Category = "Trial License")
+    bool bValidationSuccess;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Trial License")
+    FString FileOperationStatusMessage;
 
 public:
     /**
@@ -136,17 +202,6 @@ public:
     FText GetMessageText() const;
 
     /**
-     * @brief 获取关闭按钮文本（可在蓝图中重写）
-     *
-     * 返回关闭按钮的显示文本。
-     * 可以在蓝图中重写此方法，实现自定义的按钮文本。
-     *
-     * @return 关闭按钮文本
-     */
-    UFUNCTION(BlueprintPure, BlueprintNativeEvent, Category = "Trial License")
-    FText GetCloseButtonText() const;
-
-    /**
      * @brief 获取退出按钮文本（可在蓝图中重写）
      *
      * 返回退出应用按钮的显示文本。
@@ -156,6 +211,17 @@ public:
      */
     UFUNCTION(BlueprintPure, BlueprintNativeEvent, Category = "Trial License")
     FText GetQuitButtonText() const;
+
+    /**
+     * @brief 获取验证按钮文本（可在蓝图中重写）
+     *
+     * 返回验证许可证按钮的显示文本。
+     * 可以在蓝图中重写此方法，实现自定义的按钮文本。
+     *
+     * @return 验证按钮文本
+     */
+    UFUNCTION(BlueprintPure, BlueprintNativeEvent, Category = "Trial License")
+    FText GetValidateButtonText() const;
 
     /**
      * @brief 获取剩余时间的格式化文本

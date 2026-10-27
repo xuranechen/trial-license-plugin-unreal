@@ -20,24 +20,24 @@ public:
 	 *
 	 * 将许可证信息结构体序列化为JSON格式，然后使用AES加密算法加密，
 	 * 生成最终的许可证密钥字符串。
+	 * 加密口令自动使用项目名称 (FApp::GetProjectName())。
 	 *
 	 * @param LicenseInfo 包含许可证详细信息的结构体
-	 * @param PassPhrase 用于加密的密码短语
 	 * @return 加密后的许可证密钥字符串
 	 */
-	static FString GenerateLicenseKey(const FTrialLicenseInfo& LicenseInfo, const FString& PassPhrase);
+	static FString GenerateLicenseKey(const FTrialLicenseInfo& LicenseInfo);
 
 	/**
 	 * @brief 解析加密的许可证密钥字符串
 	 *
 	 * 解密许可证密钥字符串，解析其中的JSON数据，并提取许可证信息填充到结构体中。
 	 * 如果解密失败或JSON解析失败，返回空的许可证信息结构体。
+	 * 解密口令自动使用项目名称 (FApp::GetProjectName())。
 	 *
 	 * @param LicenseKey 要解析的加密许可证密钥字符串
-	 * @param PassPhrase 用于解密的密码短语
 	 * @return 解析出的许可证信息结构体，包含所有许可证详细信息
 	 */
-	static FTrialLicenseInfo ParseLicenseKey(const FString& LicenseKey, const FString& PassPhrase);
+	static FTrialLicenseInfo ParseLicenseKey(const FString& LicenseKey);
 
 	/**
 	 * @brief 计算输入字符串的SHA256哈希值
@@ -79,14 +79,14 @@ public:
 	 * @brief 生成许可证签名
 	 *
 	 * 使用SHA256哈希算法对许可证的关键信息生成数字签名，用于验证许可证的完整性和真实性。
-	 * 签名数据包括密码短语、机器ID、时间戳、项目ID和永久许可证标志。
+	 * 签名数据包括项目名称、机器ID、时间戳、项目ID和永久许可证标志。
+	 * 密码短语自动使用项目名称 (FApp::GetProjectName())。
 	 *
-	 * @param PassPhrase 密码短语，用于生成签名的密钥
 	 * @param MachineID 机器唯一标识符
 	 * @param Time 许可证生成或验证的时间戳
 	 * @param ProjectId 项目标识符
 	 * @param bPerpetual 是否为永久许可证
 	 * @return 生成的SHA256哈希签名字符串
 	 */
-	static FString GenerateSignature(const FString& PassPhrase, const FString& MachineID, const FDateTime& Time, const FString& ProjectId, bool bPerpetual);
+	static FString GenerateSignature(const FString& MachineID, const FDateTime& Time, const FString& ProjectId, bool bPerpetual);
 };

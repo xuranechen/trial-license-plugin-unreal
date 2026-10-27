@@ -65,6 +65,19 @@ public:
 	 */
 	static FString GetTrialDataFilePath();
 
+	/**
+	 * @brief 验证本地保存的证书是否有效
+	 *
+	 * 检查本地保存的证书数据是否存在且有效。验证内容包括：
+	 * 1. 证书文件是否存在
+	 * 2. 证书数据是否可以正确解密和解析
+	 * 3. 机器ID是否匹配当前设备
+	 * 4. 证书哈希是否存在
+	 *
+	 * @return true 如果本地证书存在且有效，false 如果证书不存在、损坏或机器ID不匹配
+	 */
+	static bool IsLocalLicenseValid();
+
 private:
 	/**
 	 * @brief 加密并保存数据到文件

@@ -7,7 +7,7 @@
  * 从而防止用户通过修改系统时间来绕过试用期限制。数据通过AES加密存储在文件中。
  */
 #include "TimeGuard.h"
-#include "HAL/PlatformFilemanager.h"
+#include "HAL/PlatformFileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonSerializer.h"
@@ -18,7 +18,6 @@
 #include "Engine/Engine.h"
 #include "Misc/EngineVersion.h"
 #include "Templates/UnrealTemplate.h"
-#include "Async/Async.h"
 #include "Misc/ConfigCacheIni.h"
 
 static FString GetTimeGuardFilePath()
@@ -64,7 +63,10 @@ bool FTimeGuard::HasSystemTimeTampered()
 		const FString JsonString = FLicenseEncryptor::AESDecrypt(FileContent, GetTimeGuardEncryptKey());
 		if (JsonString.IsEmpty())
 		{
-			return true; // 无法解密视为异常
+			// 历史文件可能由旧密钥或异常退出导致，避免一次损坏直接锁死
+			UE_LOG(LogTemp, Warning, TEXT("[TrialLicense][TimeGuard] Failed to decrypt time guard file, reset it."));
+			RecordSessionEndTime();
+			return false;
 		}
 		TSharedPtr<FJsonObject> JsonObject;
 		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
@@ -90,6 +92,7 @@ bool FTimeGuard::HasSystemTimeTampered()
 	}
 
 	// 没有发现时间篡改
+	RecordSessionEndTime();
 	return false;
 }
 
@@ -97,7 +100,7 @@ bool FTimeGuard::HasSystemTimeTampered()
  * @brief 记录当前会话结束时间
  *
  * 将当前系统时间加密后保存到文件中，用于下次启动时检测时间篡改。
- * 使用异步操作在后台线程中保存文件，避免阻塞主线程。
+ * 采用同步写入，避免进程退出阶段异步任务未落盘导致数据损坏。
  */
 void FTimeGuard::RecordSessionEndTime()
 {
@@ -112,13 +115,10 @@ void FTimeGuard::RecordSessionEndTime()
 	TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&JsonString);
 	FJsonSerializer::Serialize(JsonObject.ToSharedRef(), Writer);
 
-	// 加密并保存到文件
+	// 加密并保存到文件（同步写入，避免进程退出时异步任务未落盘）
 	FString FilePath = GetTimeGuardFilePath();
 	const FString Encrypted = FLicenseEncryptor::AESEncrypt(JsonString, GetTimeGuardEncryptKey());
-	Async(EAsyncExecution::ThreadPool, [FilePath, DataToSave = Encrypted]()
-	{
-		FFileHelper::SaveStringToFile(DataToSave, *FilePath);
-	});
+	FFileHelper::SaveStringToFile(Encrypted, *FilePath);
 }
 
 /**
@@ -144,7 +144,7 @@ FDateTime FTimeGuard::GetLastSessionEndTime()
 	if (FFileHelper::LoadFileToString(FileContent, *FilePath))
 	{
 		// 解密并解析JSON
-		const FString JsonString = FLicenseEncryptor::AESDecrypt(FileContent, TEXT("TrialTimeGuardKey"));
+		const FString JsonString = FLicenseEncryptor::AESDecrypt(FileContent, GetTimeGuardEncryptKey());
 		if (JsonString.IsEmpty())
 		{
 			return FDateTime::MinValue();

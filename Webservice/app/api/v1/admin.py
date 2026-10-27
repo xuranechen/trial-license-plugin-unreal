@@ -47,6 +47,10 @@ def _normalize_passphrase(value: "Optional[str]", project_id: str) -> str:
 
 
 def _serialize_license(license_obj: License) -> dict:
+    license_type_raw = getattr(
+        license_obj.license_type, "value", license_obj.license_type
+    )
+    license_type = str(license_type_raw).lower()
     return {
         "id": license_obj.id,
         "license_key": license_obj.license_key,
@@ -55,13 +59,15 @@ def _serialize_license(license_obj: License) -> dict:
         "user_id": license_obj.user_id,
         "email": license_obj.email,
         "company": license_obj.company,
-        "license_type": getattr(
-            license_obj.license_type, "value", license_obj.license_type
-        ),
+        "license_type": license_type,
         "duration_hours": license_obj.duration_hours,
         "generate_time": license_obj.generate_time,
         "expiry_time": license_obj.expiry_time,
         "is_perpetual": license_obj.is_perpetual,
+        "show_watermark": getattr(license_obj, "show_watermark", True),
+        "uses_no_watermark_benefit": getattr(
+            license_obj, "uses_no_watermark_benefit", False
+        ),
         "is_expired": getattr(license_obj, "is_expired", False),
         "is_revoked": license_obj.is_revoked,
         "revoke_reason": license_obj.revoke_reason,
@@ -536,6 +542,12 @@ async def get_user_detail_dashboard(
                 "extra_trial_duration_hours": float(
                     getattr(benefit, "extra_trial_duration_hours", 0) or 0
                 ),
+                "extra_no_watermark_trial_requests": int(
+                    getattr(benefit, "extra_no_watermark_trial_requests", 0) or 0
+                ),
+                "allow_no_watermark_trial": bool(
+                    getattr(benefit, "allow_no_watermark_trial", False)
+                ),
             }
         )
 
@@ -592,9 +604,15 @@ async def get_user_detail_dashboard(
                 "id": item.id,
                 "project_id": item.project_id,
                 "machine_id": item.machine_id,
-                "license_type": getattr(item.license_type, "value", item.license_type),
+                "license_type": str(
+                    getattr(item.license_type, "value", item.license_type)
+                ).lower(),
                 "expiry_time": item.expiry_time,
                 "is_perpetual": item.is_perpetual,
+                "show_watermark": getattr(item, "show_watermark", True),
+                "uses_no_watermark_benefit": getattr(
+                    item, "uses_no_watermark_benefit", False
+                ),
                 "is_expired": getattr(item, "is_expired", False),
                 "is_revoked": item.is_revoked,
                 "generate_time": item.generate_time,
@@ -644,6 +662,7 @@ async def issue_license_for_user(
         project_id=app.project_id,
         machine_id=payload.machine_id,
         is_perpetual=is_perpetual,
+        show_watermark=payload.show_watermark,
     )
 
     license_record = License(
@@ -658,6 +677,9 @@ async def issue_license_for_user(
         generate_time=generate_time,
         expiry_time=expiry_time,
         is_perpetual=is_perpetual,
+        show_watermark=payload.show_watermark,
+        uses_no_watermark_benefit=not payload.show_watermark,
+        counts_against_trial_limit=False,
     )
     db.add(license_record)
     db.commit()
@@ -699,8 +721,45 @@ async def update_user_trial_benefits(
         )
         db.add(benefit)
 
-    benefit.extra_trial_requests = payload.extra_trial_requests
-    benefit.extra_trial_duration_hours = payload.extra_trial_duration_hours
+    current_extra_trial_requests = int(getattr(benefit, "extra_trial_requests", 0) or 0)
+    current_extra_trial_duration_hours = float(
+        getattr(benefit, "extra_trial_duration_hours", 0) or 0
+    )
+    current_extra_no_watermark_trial_requests = int(
+        getattr(benefit, "extra_no_watermark_trial_requests", 0) or 0
+    )
+
+    next_extra_trial_requests = current_extra_trial_requests + int(
+        payload.extra_trial_requests
+    )
+    next_extra_trial_duration_hours = current_extra_trial_duration_hours + float(
+        payload.extra_trial_duration_hours
+    )
+    next_extra_no_watermark_trial_requests = (
+        current_extra_no_watermark_trial_requests
+        + int(payload.extra_no_watermark_trial_requests)
+    )
+
+    if next_extra_trial_requests < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="额外试用次数调整后不能小于 0",
+        )
+    if next_extra_trial_duration_hours < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="额外试用时长调整后不能小于 0",
+        )
+    if next_extra_no_watermark_trial_requests < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="额外免水印试用次数调整后不能小于 0",
+        )
+
+    benefit.extra_trial_requests = next_extra_trial_requests
+    benefit.extra_trial_duration_hours = next_extra_trial_duration_hours
+    benefit.extra_no_watermark_trial_requests = next_extra_no_watermark_trial_requests
+    benefit.allow_no_watermark_trial = payload.allow_no_watermark_trial
     db.commit()
     db.refresh(benefit)
     return {
@@ -712,6 +771,10 @@ async def update_user_trial_benefits(
             "extra_trial_duration_hours": float(
                 benefit.extra_trial_duration_hours or 0
             ),
+            "extra_no_watermark_trial_requests": int(
+                benefit.extra_no_watermark_trial_requests or 0
+            ),
+            "allow_no_watermark_trial": bool(benefit.allow_no_watermark_trial),
         },
     }
 

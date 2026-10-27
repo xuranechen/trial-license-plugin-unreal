@@ -222,6 +222,7 @@ class EncryptionService:
         project_id: str,
         machine_id: str,
         is_perpetual: bool = False,
+        show_watermark: bool = True,
     ) -> str:
         """
         生成许可证密钥
@@ -244,6 +245,7 @@ class EncryptionService:
             "MachineID": machine_id,
             "ProjectId": project_id,
             "Perpetual": is_perpetual,
+            "ShowWatermark": show_watermark,
             "Signature": signature,
         }
 

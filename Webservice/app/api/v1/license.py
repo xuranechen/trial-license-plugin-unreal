@@ -5,6 +5,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response, BackgroundTasks
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
+from typing import Optional
+import traceback
 from app.database import get_db
 from app.schemas.license import (
     LicenseRequest,
@@ -32,7 +34,9 @@ import uuid
 router = APIRouter(prefix="/license", tags=["License"])
 
 
-def _serialize_user_license(license_record: License) -> LicenseDetail:
+def _serialize_user_license(
+    license_record: License, show_watermark_override: Optional[bool] = None
+) -> LicenseDetail:
     masked = bool(
         getattr(license_record, "is_revoked", False)
         or getattr(license_record, "is_expired", False)
@@ -46,18 +50,57 @@ def _serialize_user_license(license_record: License) -> LicenseDetail:
         user_id=license_record.user_id,
         email=license_record.email,
         company=license_record.company,
-        license_type=getattr(
-            license_record.license_type, "value", license_record.license_type
-        ),
+        license_type=str(
+            getattr(license_record.license_type, "value", license_record.license_type)
+        ).lower(),
         duration_hours=license_record.duration_hours,
         generate_time=license_record.generate_time,
         expiry_time=license_record.expiry_time,
         is_perpetual=license_record.is_perpetual,
+        show_watermark=(
+            show_watermark_override
+            if show_watermark_override is not None
+            else getattr(license_record, "show_watermark", True)
+        ),
+        uses_no_watermark_benefit=getattr(
+            license_record, "uses_no_watermark_benefit", False
+        ),
         is_expired=getattr(license_record, "is_expired", False),
         is_revoked=license_record.is_revoked,
         revoke_reason=license_record.revoke_reason,
         created_at=license_record.created_at,
     )
+
+
+def _resolve_license_show_watermark(
+    db: Session, license_record: License, app_cache: dict[str, Application]
+) -> bool:
+    existing_value = getattr(license_record, "show_watermark", None)
+    if existing_value is False:
+        return False
+    if existing_value is True:
+        return True
+
+    project_id = str(getattr(license_record, "project_id", "") or "")
+    license_key = str(getattr(license_record, "license_key", "") or "")
+    if not project_id or not license_key:
+        return True
+
+    app = app_cache.get(project_id)
+    if app is None:
+        app = db.query(Application).filter(Application.project_id == project_id).first()
+        if app is None:
+            return True
+        app_cache[project_id] = app
+
+    try:
+        passphrase = get_effective_passphrase(app, project_id)
+        parsed = EncryptionService.parse_license_key(license_key, passphrase)
+        if "ShowWatermark" in parsed:
+            return bool(parsed.get("ShowWatermark", True))
+    except Exception:
+        pass
+    return True
 
 
 def _get_license_pricing(app: Application) -> dict:
@@ -106,10 +149,33 @@ def _get_trial_usage_info(
             License.project_id == project_id,
             License.machine_id == machine_id,
             License.license_type == LicenseType.TRIAL,
+            License.counts_against_trial_limit == True,
         )
         .count()
     )
     remaining_attempts = max(trial_limit - used_attempts, 0)
+    return used_attempts, remaining_attempts
+
+
+def _get_no_watermark_trial_usage_info(
+    db: Session,
+    user_id: str,
+    project_id: str,
+    machine_id: str,
+    no_watermark_limit: int,
+) -> tuple[int, int]:
+    used_attempts = (
+        db.query(License)
+        .filter(
+            License.user_id == user_id,
+            License.project_id == project_id,
+            License.machine_id == machine_id,
+            License.license_type == LicenseType.TRIAL,
+            License.uses_no_watermark_benefit == True,
+        )
+        .count()
+    )
+    remaining_attempts = max(no_watermark_limit - used_attempts, 0)
     return used_attempts, remaining_attempts
 
 
@@ -146,8 +212,6 @@ async def request_license(
     # 从加密口令中解析 machine_id
     # 注意：UE 客户端使用 project_id 作为加密密钥
     try:
-        import traceback
-
         print(f"[DEBUG] 开始解析加密令牌...")
         print(f"[DEBUG] project_id: {request.project_id}")
         print(f"[DEBUG] encrypted_token (前50字符): {request.encrypted_token[:50]}...")
@@ -226,18 +290,39 @@ async def get_trial_availability(
     used_attempts, remaining_attempts = _get_trial_usage_info(
         db, current_user.id, request.project_id, machine_id, trial_limit
     )
+    no_watermark_limit = int(policy.get("no_watermark_trial_request_limit", 0) or 0)
+    used_no_watermark_attempts, remaining_no_watermark_attempts = (
+        _get_no_watermark_trial_usage_info(
+            db,
+            current_user.id,
+            request.project_id,
+            machine_id,
+            no_watermark_limit,
+        )
+    )
     allowed = remaining_attempts > 0
+    allow_no_watermark_trial = bool(policy.get("allow_no_watermark_trial", False))
     message = (
         f"当前设备还可申请 {remaining_attempts}/{trial_limit} 次试用许可证"
         if allowed
         else f"当前设备的试用许可证申请次数已用完（0/{trial_limit}）"
     )
+    if allow_no_watermark_trial:
+        message += f"，免水印试用剩余 {remaining_no_watermark_attempts}/{no_watermark_limit} 次"
 
     return TrialAvailabilityResponse(
         allowed=allowed,
         remaining_trial_requests=remaining_attempts,
         trial_request_limit=trial_limit,
         used_trial_requests=used_attempts,
+        used_no_watermark_trial_requests=used_no_watermark_attempts,
+        remaining_no_watermark_trial_requests=remaining_no_watermark_attempts,
+        no_watermark_trial_request_limit=no_watermark_limit,
+        allow_no_watermark_trial=allow_no_watermark_trial,
+        effective_trial_duration_hours=float(policy["trial_duration_hours"]),
+        extra_trial_duration_hours=float(
+            policy.get("extra_trial_duration_hours", 0) or 0
+        ),
         message=message,
     )
 
@@ -255,6 +340,9 @@ async def _generate_trial_license(
     policy = get_effective_trial_policy(db, current_user.id, app)
     trial_limit = policy["trial_request_limit"]
     effective_duration_hours = policy["trial_duration_hours"]
+    request_no_watermark = bool(request.request_no_watermark)
+    allow_no_watermark_trial = bool(policy.get("allow_no_watermark_trial", False))
+    no_watermark_limit = int(policy.get("no_watermark_trial_request_limit", 0) or 0)
     used_attempts = (
         db.query(License)
         .filter(
@@ -262,16 +350,40 @@ async def _generate_trial_license(
             License.project_id == request.project_id,
             License.machine_id == machine_id,
             License.license_type == LicenseType.TRIAL,
+            License.counts_against_trial_limit == True,
         )
         .count()
     )
     remaining_before_apply = max(trial_limit - used_attempts, 0)
+    used_no_watermark_attempts, remaining_no_watermark_before_apply = (
+        _get_no_watermark_trial_usage_info(
+            db,
+            current_user.id,
+            request.project_id,
+            machine_id,
+            no_watermark_limit,
+        )
+    )
 
     if remaining_before_apply <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"该设备在当前应用下的试用许可证申请次数已用完（剩余 0/{trial_limit} 次）",
         )
+
+    if request_no_watermark:
+        if not allow_no_watermark_trial:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="当前账号未开通免水印试用权益",
+            )
+        if remaining_no_watermark_before_apply <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"当前设备的免水印试用次数已用完（剩余 0/{no_watermark_limit} 次）"
+                ),
+            )
 
     # 检查是否已有试用许可证，如果有则撤销旧的
     existing = (
@@ -304,6 +416,7 @@ async def _generate_trial_license(
             project_id=request.project_id,
             machine_id=machine_id,
             is_perpetual=False,
+            show_watermark=not request_no_watermark,
         )
     except Exception as e:
         raise HTTPException(
@@ -324,6 +437,9 @@ async def _generate_trial_license(
         generate_time=generate_time,
         expiry_time=expiry_time,
         is_perpetual=False,
+        show_watermark=not request_no_watermark,
+        uses_no_watermark_benefit=request_no_watermark,
+        counts_against_trial_limit=True,
     )
 
     db.add(license_record)
@@ -331,6 +447,9 @@ async def _generate_trial_license(
     db.refresh(license_record)
 
     remaining_after_apply = max(trial_limit - used_attempts - 1, 0)
+    remaining_no_watermark_after_apply = max(
+        remaining_no_watermark_before_apply - (1 if request_no_watermark else 0), 0
+    )
 
     # 后台异步发送邮件（不阻塞API响应）
     def send_email_task():
@@ -355,9 +474,19 @@ async def _generate_trial_license(
         expiry_date=expiry_time,
         duration_hours=effective_duration_hours,
         is_perpetual=False,
-        message=f"试用许可证已生成，确认邮件正在后台发送，剩余试用申请次数 {remaining_after_apply}/{trial_limit}",
+        message=(
+            "免水印试用许可证已生成，确认邮件正在后台发送，"
+            f"剩余试用申请次数 {remaining_after_apply}/{trial_limit}，"
+            f"剩余免水印试用次数 {remaining_no_watermark_after_apply}/{no_watermark_limit}"
+            if request_no_watermark
+            else f"试用许可证已生成，确认邮件正在后台发送，剩余试用申请次数 {remaining_after_apply}/{trial_limit}"
+        ),
         remaining_trial_requests=remaining_after_apply,
         trial_request_limit=trial_limit,
+        request_no_watermark=request_no_watermark,
+        show_watermark=not request_no_watermark,
+        remaining_no_watermark_trial_requests=remaining_no_watermark_after_apply,
+        no_watermark_trial_request_limit=no_watermark_limit,
     )
 
 
@@ -417,6 +546,8 @@ async def _create_purchase_order(
         order_no=order_no,
         amount=license_config["price"],
         payment_url=f"/payment?order_id={order.id}",
+        request_no_watermark=False,
+        show_watermark=False,
     )
 
 
@@ -471,6 +602,8 @@ async def complete_purchase(
         duration_hours=duration_hours,
         is_perpetual=is_perpetual,
         message="支付成功，许可证已自动生成并发送到您的邮箱",
+        request_no_watermark=False,
+        show_watermark=getattr(license_record, "show_watermark", True),
     )
 
 
@@ -577,6 +710,8 @@ async def request_trial_license(request: LicenseRequest, db: Session = Depends(g
         generate_time=generate_time,
         expiry_time=expiry_time,
         is_perpetual=False,
+        show_watermark=True,
+        uses_no_watermark_benefit=False,
     )
 
     db.add(license_record)
@@ -591,6 +726,8 @@ async def request_trial_license(request: LicenseRequest, db: Session = Depends(g
         duration_hours=app.trial_duration_hours,
         is_perpetual=False,
         message="试用许可证已生成",
+        request_no_watermark=False,
+        show_watermark=True,
     )
 
 
@@ -629,6 +766,7 @@ async def purchase_license(request: LicenseRequest, db: Session = Depends(get_db
             project_id=request.project_id,
             machine_id=request.machine_id,
             is_perpetual=True,
+            show_watermark=False,
         )
     except Exception as e:
         raise HTTPException(
@@ -649,6 +787,8 @@ async def purchase_license(request: LicenseRequest, db: Session = Depends(get_db
         generate_time=generate_time,
         expiry_time=expiry_time,
         is_perpetual=True,
+        show_watermark=False,
+        uses_no_watermark_benefit=False,
     )
 
     db.add(license_record)
@@ -662,6 +802,8 @@ async def purchase_license(request: LicenseRequest, db: Session = Depends(get_db
         duration_hours=0,
         is_perpetual=True,
         message="永久许可证已激活",
+        request_no_watermark=False,
+        show_watermark=False,
     )
 
 
@@ -811,7 +953,16 @@ async def get_my_licenses(
         .all()
     )
 
-    return [_serialize_user_license(license) for license in licenses]
+    app_cache: dict[str, Application] = {}
+    return [
+        _serialize_user_license(
+            license,
+            show_watermark_override=_resolve_license_show_watermark(
+                db, license, app_cache
+            ),
+        )
+        for license in licenses
+    ]
 
 
 @router.get("/{license_id}", response_model=LicenseDetail)

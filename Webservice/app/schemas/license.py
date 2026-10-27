@@ -18,6 +18,7 @@ class LicenseRequest(BaseModel):
     license_type: Optional[str] = Field(
         "trial", description="许可证类型：trial或perpetual"
     )
+    request_no_watermark: bool = Field(False, description="是否申请免水印试用")
 
 
 class TrialAvailabilityResponse(BaseModel):
@@ -27,6 +28,18 @@ class TrialAvailabilityResponse(BaseModel):
     remaining_trial_requests: int = Field(..., description="剩余试用申请次数")
     trial_request_limit: int = Field(..., description="试用申请次数上限")
     used_trial_requests: int = Field(..., description="已使用试用申请次数")
+    used_no_watermark_trial_requests: int = Field(
+        ..., description="已使用免水印试用次数"
+    )
+    remaining_no_watermark_trial_requests: int = Field(
+        ..., description="剩余免水印试用次数"
+    )
+    no_watermark_trial_request_limit: int = Field(..., description="免水印试用次数上限")
+    allow_no_watermark_trial: bool = Field(..., description="是否允许申请免水印试用")
+    effective_trial_duration_hours: float = Field(
+        ..., description="当前用户生效后的试用时长（小时）"
+    )
+    extra_trial_duration_hours: float = Field(0, description="单次试用时长加成（小时）")
     message: str = Field(..., description="提示消息")
 
 
@@ -48,6 +61,14 @@ class LicenseResponse(BaseModel):
         None, description="剩余试用申请次数"
     )
     trial_request_limit: Optional[int] = Field(None, description="试用申请次数上限")
+    request_no_watermark: bool = Field(False, description="本次是否申请免水印试用")
+    show_watermark: bool = Field(True, description="生成的许可证是否显示水印")
+    remaining_no_watermark_trial_requests: Optional[int] = Field(
+        None, description="剩余免水印试用次数"
+    )
+    no_watermark_trial_request_limit: Optional[int] = Field(
+        None, description="免水印试用次数上限"
+    )
 
 
 class ValidateLicenseRequest(BaseModel):
@@ -85,6 +106,8 @@ class LicenseDetail(BaseModel):
     generate_time: datetime
     expiry_time: Optional[datetime]
     is_perpetual: bool
+    show_watermark: bool = True
+    uses_no_watermark_benefit: bool = False
     is_expired: bool = False
     is_revoked: bool
     revoke_reason: Optional[str]

@@ -37,9 +37,6 @@ public:
     UPROPERTY(EditAnywhere, Config, Category="License", meta=(DisplayName="许可证密钥 | License Key", ToolTip="用于解密和验证的许可证密钥 | The license key used for decryption/validation"))
     FString LicenseKey;
 
-    UPROPERTY(EditAnywhere, Config, Category="License", meta=(DisplayName="口令 | Passphrase", ToolTip="与许可证配套的口令/密钥短语 | Passphrase paired with the license"))
-    FString PassPhrase;
-
     UPROPERTY(EditAnywhere, Config, Category="License", meta=(DisplayName="使用UMG弹窗 | Use UMG Widget", ToolTip="启用后使用UMG自定义弹窗，否则使用默认Slate弹窗 | Enable to use custom UMG widget, otherwise use default Slate dialog"))
     bool bUseUMGWidget;
 
@@ -48,6 +45,9 @@ public:
 
     UPROPERTY(EditAnywhere, Config, Category="License", meta=(DisplayName="自动弹出过期提示 | Auto Show Expired Dialog", ToolTip="证书过期时自动弹出提示窗口 | Automatically show dialog when license expires"))
     bool bAutoShowExpiredDialog;
+
+    UPROPERTY(EditAnywhere, Config, Category="License", meta=(DisplayName="试用证书默认显示水印 | Trial Shows Watermark By Default", ToolTip="新生成的试用许可证默认是否显示水印，许可证字段可覆盖此默认值 | Whether newly generated trial licenses show watermark by default; the license field can override this default"))
+    bool bDefaultTrialLicenseShowWatermark;
 
     UPROPERTY(EditAnywhere, Config, Category="Watermark", meta=(ClampMin="0.0", ClampMax="1.0", DisplayName="水印不透明度 | Opacity", ToolTip="水印透明度(0-1) | Watermark opacity (0-1)"))
     float WatermarkOpacity;
@@ -95,7 +95,7 @@ public:
      *
      * @return 节标题文本
      */
-    virtual FText GetSectionText() const override;
+    virtual FText GetSectionText() const;
 
     /**
      * @brief 获取设置节描述文本
@@ -104,7 +104,7 @@ public:
      *
      * @return 节描述文本
      */
-    virtual FText GetSectionDescription() const override;
+    virtual FText GetSectionDescription() const;
 
 #if WITH_EDITOR
     /**

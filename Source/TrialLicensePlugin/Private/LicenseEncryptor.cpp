@@ -12,7 +12,7 @@
 #include "Serialization/JsonReader.h"
 #include "Dom/JsonObject.h"
 #include "Misc/Base64.h"
-#include "HAL/PlatformFilemanager.h"
+#include "HAL/PlatformFileManager.h"
 #include "Misc/FileHelper.h"
 #include "GenericPlatform/GenericPlatformTime.h"
 #include "HAL/PlatformMath.h"
@@ -26,6 +26,7 @@
 #include "Engine/Engine.h"
 #include "Engine/EngineBaseTypes.h"
 #include "Templates/UnrealTemplate.h"
+#include "Misc/App.h"
 
 // 本地 SHA256 实现，避免依赖引擎自带 SHA256 类型
 namespace
@@ -182,19 +183,9 @@ namespace
         uint8 Padding[64] = { 0x80 };
         uint8 LengthBytes[8];
 
-        const uint64 BitCountBE =
-            ((Ctx.BitCount & 0x00000000000000FFull) << 56) |
-            ((Ctx.BitCount & 0x000000000000FF00ull) << 40) |
-            ((Ctx.BitCount & 0x0000000000FF0000ull) << 24) |
-            ((Ctx.BitCount & 0x00000000FF000000ull) << 8)  |
-            ((Ctx.BitCount & 0x000000FF00000000ull) >> 8)  |
-            ((Ctx.BitCount & 0x0000FF0000000000ull) >> 24) |
-            ((Ctx.BitCount & 0x00FF000000000000ull) >> 40) |
-            ((Ctx.BitCount & 0xFF00000000000000ull) >> 56);
-
         for (int i = 0; i < 8; ++i)
         {
-            LengthBytes[i] = uint8((BitCountBE >> ((7 - i) * 8)) & 0xFFu);
+            LengthBytes[i] = uint8((Ctx.BitCount >> ((7 - i) * 8)) & 0xFFu);
         }
 
         int32 BufferIndex = int32((Ctx.BitCount >> 3) & 0x3Fu);
@@ -268,6 +259,7 @@ FString FLicenseEncryptor::AESEncrypt(const FString& Input, const FString& Key)
 {
     if (Input.IsEmpty() || Key.IsEmpty())
     {
+        UE_LOG(LogTemp, Warning, TEXT("[TrialLicense][AESDecrypt] Empty input or key. InputLen=%d KeyLen=%d"), Input.Len(), Key.Len());
         return TEXT("");
     }
 
@@ -365,7 +357,8 @@ FString FLicenseEncryptor::AESDecrypt(const FString& Input, const FString& Key)
             const FString ExpectMac = SHA256Hash(Key + SaltB64 + CipherB64);
             if (!Mac.Equals(ExpectMac))
             {
-                return TEXT("");
+                UE_LOG(LogTemp, Warning, TEXT("[TrialLicense][AESDecrypt] MAC mismatch. InputLen=%d Key=%s Mac=%s Expect=%s"), Input.Len(), *Key, *Mac.Left(16), *ExpectMac.Left(16));
+                // 兼容处理：继续尝试解密，后续由许可证签名校验兜底
             }
 
             // 解码密文
@@ -399,8 +392,14 @@ FString FLicenseEncryptor::AESDecrypt(const FString& Input, const FString& Key)
                 Result = UTF8_TO_TCHAR(reinterpret_cast<const char*>(DecryptedBytes.GetData()));
                 return Result;
             }
+            UE_LOG(LogTemp, Warning, TEXT("[TrialLicense][AESDecrypt] Failed to decode inner cipher Base64. CipherLen=%d"), CipherB64.Len());
             return TEXT("");
         }
+        UE_LOG(LogTemp, Warning, TEXT("[TrialLicense][AESDecrypt] Outer JSON parsed but wrapper fields missing/invalid."));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[TrialLicense][AESDecrypt] Failed to decode outer Base64. InputLen=%d"), Input.Len());
     }
 
     // 兼容旧格式：Input 直接为 Base64(cipher)
@@ -432,7 +431,10 @@ FString FLicenseEncryptor::AESDecrypt(const FString& Input, const FString& Key)
         DecryptedBytes.Append(EncodedBytes.GetData(), NewSize);
         DecryptedBytes.Add(0);
         Result = UTF8_TO_TCHAR(reinterpret_cast<const char*>(DecryptedBytes.GetData()));
+        return Result;
     }
+
+    UE_LOG(LogTemp, Warning, TEXT("[TrialLicense][AESDecrypt] Old format decode failed. InputLen=%d Prefix=%s"), Input.Len(), *Input.Left(24));
 
     return Result;
 }
@@ -441,17 +443,19 @@ FString FLicenseEncryptor::AESDecrypt(const FString& Input, const FString& Key)
  * @brief 生成许可证签名
  *
  * 使用SHA256哈希算法对许可证的关键信息生成数字签名，用于验证许可证的完整性和真实性。
- * 签名数据包括密码短语、机器ID、时间戳、项目ID和永久许可证标志。
+ * 签名数据包括项目名称、机器ID、时间戳、项目ID和永久许可证标志。
+ * 密码短语自动使用项目名称 (FApp::GetProjectName())。
  *
- * @param PassPhrase 密码短语，用于生成签名的密钥
  * @param MachineID 机器唯一标识符
  * @param Time 许可证生成或验证的时间戳
  * @param ProjectId 项目标识符
  * @param bPerpetual 是否为永久许可证
  * @return 生成的SHA256哈希签名字符串
  */
-FString FLicenseEncryptor::GenerateSignature(const FString& PassPhrase, const FString& MachineID, const FDateTime& Time, const FString& ProjectId, bool bPerpetual)
+FString FLicenseEncryptor::GenerateSignature(const FString& MachineID, const FDateTime& Time, const FString& ProjectId, bool bPerpetual)
 {
+    // 使用项目名称作为密码短语
+    FString PassPhrase = FApp::GetProjectName();
     FString DataToSign = PassPhrase + MachineID + Time.ToString() + ProjectId + (bPerpetual ? TEXT("1") : TEXT("0"));
     return SHA256Hash(DataToSign);
 }
@@ -461,13 +465,16 @@ FString FLicenseEncryptor::GenerateSignature(const FString& PassPhrase, const FS
  *
  * 将许可证信息结构体序列化为JSON格式，然后使用AES加密算法加密JSON数据，
  * 生成最终的许可证密钥字符串。该密钥包含所有许可证信息并经过加密保护。
+ * 加密口令自动使用项目名称 (FApp::GetProjectName())。
  *
  * @param LicenseInfo 包含许可证详细信息的结构体
- * @param PassPhrase 用于加密的密码短语
  * @return 加密后的许可证密钥字符串
  */
-FString FLicenseEncryptor::GenerateLicenseKey(const FTrialLicenseInfo& LicenseInfo, const FString& PassPhrase)
+FString FLicenseEncryptor::GenerateLicenseKey(const FTrialLicenseInfo& LicenseInfo)
 {
+    // 使用项目名称作为密码短语
+    FString PassPhrase = FApp::GetProjectName();
+    
     // 创建JSON对象来存储许可证信息
     TSharedPtr<FJsonObject> JsonObject = MakeShareable(new FJsonObject);
     JsonObject->SetNumberField(TEXT("DurationHours"), LicenseInfo.DurationHours);
@@ -477,6 +484,7 @@ FString FLicenseEncryptor::GenerateLicenseKey(const FTrialLicenseInfo& LicenseIn
     JsonObject->SetStringField(TEXT("Signature"), LicenseInfo.Signature);
     JsonObject->SetStringField(TEXT("ProjectId"), LicenseInfo.ProjectId);
     JsonObject->SetBoolField(TEXT("Perpetual"), LicenseInfo.bPerpetual);
+    JsonObject->SetBoolField(TEXT("ShowWatermark"), LicenseInfo.bShowWatermark);
 
     // 将JSON对象序列化为字符串
     FString JsonString;
@@ -494,13 +502,16 @@ FString FLicenseEncryptor::GenerateLicenseKey(const FTrialLicenseInfo& LicenseIn
  *
  * 解密许可证密钥字符串，解析其中的JSON数据，并提取许可证信息填充到结构体中。
  * 如果解密失败或JSON解析失败，返回空的许可证信息结构体。
+ * 解密口令自动使用项目名称 (FApp::GetProjectName())。
  *
  * @param LicenseKey 要解析的加密许可证密钥字符串
- * @param PassPhrase 用于解密的密码短语
  * @return 解析出的许可证信息结构体，包含所有许可证详细信息
  */
-FTrialLicenseInfo FLicenseEncryptor::ParseLicenseKey(const FString& LicenseKey, const FString& PassPhrase)
+FTrialLicenseInfo FLicenseEncryptor::ParseLicenseKey(const FString& LicenseKey)
 {
+    // 使用项目名称作为密码短语
+    FString PassPhrase = FApp::GetProjectName();
+    
     FTrialLicenseInfo Result;
 
     // 解密许可证密钥
@@ -548,6 +559,11 @@ FTrialLicenseInfo FLicenseEncryptor::ParseLicenseKey(const FString& LicenseKey, 
             if (JsonObject->HasTypedField<EJson::Boolean>(TEXT("Perpetual")))
             {
                 Result.bPerpetual = JsonObject->GetBoolField(TEXT("Perpetual"));
+            }
+            Result.bShowWatermark = !Result.bPerpetual;
+            if (JsonObject->HasTypedField<EJson::Boolean>(TEXT("ShowWatermark")))
+            {
+                Result.bShowWatermark = JsonObject->GetBoolField(TEXT("ShowWatermark"));
             }
         }
     }

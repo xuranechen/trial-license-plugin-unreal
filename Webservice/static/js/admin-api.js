@@ -37,13 +37,19 @@ const AdminAPI = {
     
     try {
       const response = await fetch(url, config);
+      const contentType = response.headers.get("content-type") || "";
+      const isJson = contentType.includes("application/json");
+      const responseBody = isJson ? await response.json() : await response.text();
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || `请求失败: ${response.status}`);
+        if (isJson && responseBody && typeof responseBody === "object") {
+          throw new Error(responseBody.detail || `请求失败: ${response.status}`);
+        }
+        const textMessage = String(responseBody || "").trim();
+        throw new Error(textMessage || `请求失败: ${response.status}`);
       }
-      
-      return await response.json();
+
+      return responseBody;
     } catch (error) {
       console.error("API请求错误:", error);
       throw error;

@@ -16,6 +16,7 @@
 #include "Templates/UnrealTemplate.h"
 #include "HAL/CriticalSection.h"
 #include "Misc/Crc.h"
+#include "Misc/FileHelper.h"
 
 /**
  * @brief 获取机器唯一标识符
@@ -27,26 +28,19 @@
  */
 FString FMachineIDHelper::GetMachineID()
 {
-	// 获取系统信息作为设备标识符
-	FString MachineID = "";
+	const FString CachedMachineID = LoadCachedMachineID();
+	if (!CachedMachineID.IsEmpty())
+	{
+		return CachedMachineID;
+	}
 
-	// 获取计算机名称
-	MachineID += FPlatformProcess::ComputerName();
+	const FString StableFingerprint = BuildStableFingerprint();
+	FString MachineID = StableFingerprint.IsEmpty()
+		? FLicenseEncryptor::SHA256Hash(FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens))
+		: FLicenseEncryptor::SHA256Hash(StableFingerprint);
 
-	// 获取用户名
-	MachineID += FPlatformProcess::UserName();
-
-	// 获取CPU信息
-	MachineID += FPlatformMisc::GetCPUBrand();
-
-	// 获取内存大小
-	MachineID += FString::FromInt(FPlatformMemory::GetPhysicalGBRam());
-
-	// 获取操作系统版本
-	MachineID += FPlatformMisc::GetOSVersion();
-
-	// 使用SHA256哈希生成固定长度的设备ID
-	return FLicenseEncryptor::SHA256Hash(MachineID);
+	SaveCachedMachineID(MachineID);
+	return MachineID;
 }
 
 /**
@@ -93,4 +87,69 @@ FString FMachineIDHelper::GetHardDiskSerial()
     Fallback += FPlatformProcess::UserName();
     uint32 Hash = FCrc::StrCrc32(*Fallback);
     return FString::Printf(TEXT("%08x"), Hash);
+}
+
+FString FMachineIDHelper::GetMachineIDCachePath()
+{
+	return FPaths::ProjectSavedDir() + TEXT("MachineId.cache");
+}
+
+FString FMachineIDHelper::LoadCachedMachineID()
+{
+	FString CachedMachineID;
+	if (FFileHelper::LoadFileToString(CachedMachineID, *GetMachineIDCachePath()))
+	{
+		CachedMachineID.TrimStartAndEndInline();
+		if (CachedMachineID.Len() == 64)
+		{
+			return CachedMachineID;
+		}
+	}
+	return FString();
+}
+
+bool FMachineIDHelper::SaveCachedMachineID(const FString& MachineID)
+{
+	if (MachineID.IsEmpty())
+	{
+		return false;
+	}
+	return FFileHelper::SaveStringToFile(MachineID, *GetMachineIDCachePath());
+}
+
+FString FMachineIDHelper::BuildStableFingerprint()
+{
+	TArray<FString> Parts;
+
+	const FString CpuSerial = GetCPUSerial();
+	if (!CpuSerial.IsEmpty())
+	{
+		Parts.Add(CpuSerial);
+	}
+
+	const FString BaseboardSerial = GetBaseboardSerial();
+	if (!BaseboardSerial.IsEmpty())
+	{
+		Parts.Add(BaseboardSerial);
+	}
+
+	const FString DiskSerial = GetHardDiskSerial();
+	if (!DiskSerial.IsEmpty())
+	{
+		Parts.Add(DiskSerial);
+	}
+
+	const FString RamSize = FString::FromInt(FPlatformMemory::GetPhysicalGBRam());
+	if (!RamSize.IsEmpty())
+	{
+		Parts.Add(RamSize);
+	}
+
+	const FString GpuBrand = FPlatformMisc::GetPrimaryGPUBrand();
+	if (!GpuBrand.IsEmpty())
+	{
+		Parts.Add(GpuBrand);
+	}
+
+	return FString::Join(Parts, TEXT("|"));
 }

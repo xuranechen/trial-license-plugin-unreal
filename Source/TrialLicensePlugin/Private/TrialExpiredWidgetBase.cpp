@@ -9,11 +9,14 @@
 #include "TrialExpiredWidgetBase.h"
 #include "UTrialLicenseSubsystem.h"
 #include "TrialLicenseSettings.h"
+#include "FTrialLicenseInfo.h"
+#include "TrialWatermarkOverlay.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "HAL/PlatformApplicationMisc.h"
 #include "Misc/App.h"
 #include "Engine/Engine.h"
+#include "TimerManager.h"
 
 // 辅助函数：获取试用许可证子系统
 /**
@@ -49,6 +52,93 @@ static UTrialLicenseSubsystem* GetTrialLicenseSubsystem()
 	return nullptr;
 }
 
+static FString FormatRemainingTimeSegmentedCN_UMG(float RemainingSeconds)
+{
+	int64 TotalMinutes = FMath::Max<int64>(0, FMath::FloorToInt64(RemainingSeconds / 60.0f));
+
+	const int64 MinutesPerHour = 60;
+	const int64 MinutesPerDay = 24 * MinutesPerHour;
+	const int64 MinutesPerMonth = 30 * MinutesPerDay;
+	const int64 MinutesPerYear = 365 * MinutesPerDay;
+
+	const int64 Years = TotalMinutes / MinutesPerYear;
+	TotalMinutes %= MinutesPerYear;
+	const int64 Months = TotalMinutes / MinutesPerMonth;
+	TotalMinutes %= MinutesPerMonth;
+	const int64 Days = TotalMinutes / MinutesPerDay;
+	TotalMinutes %= MinutesPerDay;
+	const int64 Hours = TotalMinutes / MinutesPerHour;
+	const int64 Minutes = TotalMinutes % MinutesPerHour;
+
+	FString Result;
+	if (Years > 0)
+	{
+		Result += FString::Printf(TEXT("%lld年"), Years);
+	}
+	if (Months > 0)
+	{
+		Result += FString::Printf(TEXT("%lld月"), Months);
+	}
+	if (Days > 0)
+	{
+		Result += FString::Printf(TEXT("%lld天"), Days);
+	}
+	if (Hours > 0)
+	{
+		Result += FString::Printf(TEXT("%lld小时"), Hours);
+	}
+	if (Minutes > 0 || Result.IsEmpty())
+	{
+		Result += FString::Printf(TEXT("%lld分钟"), Minutes);
+	}
+
+	return Result;
+}
+
+static FString FormatRemainingTimeSegmentedEN_UMG(float RemainingSeconds)
+{
+	int64 TotalMinutes = FMath::Max<int64>(0, FMath::FloorToInt64(RemainingSeconds / 60.0f));
+
+	const int64 MinutesPerHour = 60;
+	const int64 MinutesPerDay = 24 * MinutesPerHour;
+	const int64 MinutesPerMonth = 30 * MinutesPerDay;
+	const int64 MinutesPerYear = 365 * MinutesPerDay;
+
+	const int64 Years = TotalMinutes / MinutesPerYear;
+	TotalMinutes %= MinutesPerYear;
+	const int64 Months = TotalMinutes / MinutesPerMonth;
+	TotalMinutes %= MinutesPerMonth;
+	const int64 Days = TotalMinutes / MinutesPerDay;
+	TotalMinutes %= MinutesPerDay;
+	const int64 Hours = TotalMinutes / MinutesPerHour;
+	const int64 Minutes = TotalMinutes % MinutesPerHour;
+
+	FString Result;
+	if (Years > 0)
+	{
+		Result += FString::Printf(TEXT("%lldy "), Years);
+	}
+	if (Months > 0)
+	{
+		Result += FString::Printf(TEXT("%lldmo "), Months);
+	}
+	if (Days > 0)
+	{
+		Result += FString::Printf(TEXT("%lldd "), Days);
+	}
+	if (Hours > 0)
+	{
+		Result += FString::Printf(TEXT("%lldh "), Hours);
+	}
+	if (Minutes > 0 || Result.IsEmpty())
+	{
+		Result += FString::Printf(TEXT("%lldm"), Minutes);
+	}
+
+	Result.TrimEndInline();
+	return Result;
+}
+
 /**
  * @brief 初始化过期Widget
  *
@@ -59,6 +149,25 @@ void UTrialExpiredWidgetBase::InitializeExpiredWidget(const FString& InReason, f
     ExpireReason = InReason;
     RemainingTime = InRemainingTime;
     bIsPerpetual = bInIsPerpetual;
+    bValidationSuccess = false;
+    ValidationStatusMessage = TEXT("");
+
+    // 直接生成并缓存试用请求信息，避免每次 UI 刷新时重新生成
+    const FString MachineID = GetMachineID();
+    const FString ProjectID = GetProjectID();
+    const FString TrialRequest = GenerateTrialRequestString();
+
+    FString InfoText = FString::Printf(
+        TEXT("项目ID | Project ID:\n%s\n\n机器ID | Machine ID:\n%s\n\n试用请求 | Trial Request:\n%s\n\n"),
+        *ProjectID,
+        *MachineID,
+        *TrialRequest
+    );
+
+    InfoText += TEXT("说明：请将上述\"试用请求\"发送给开发者以获取许可证密钥。\n");
+    InfoText += TEXT("Note: Send the above \"Trial Request\" to the developer to obtain a license key.");
+
+    CachedTrialRequestInfo = FText::FromString(InfoText);
 
     // 触发蓝图事件
     OnExpiredWidgetInitialized();
@@ -69,6 +178,7 @@ void UTrialExpiredWidgetBase::InitializeExpiredWidget(const FString& InReason, f
  */
 void UTrialExpiredWidgetBase::CloseDialog()
 {
+	FTrialWatermarkOverlay::Get().ResetExpiredDialogState();
     // 从父窗口移除
     RemoveFromParent();
 }
@@ -78,8 +188,15 @@ void UTrialExpiredWidgetBase::CloseDialog()
  */
 void UTrialExpiredWidgetBase::QuitApplication()
 {
+	FTrialWatermarkOverlay::Get().ResetExpiredDialogState();
     // 退出应用
     UKismetSystemLibrary::QuitGame(this, nullptr, EQuitPreference::Quit, false);
+}
+
+void UTrialExpiredWidgetBase::NativeDestruct()
+{
+	FTrialWatermarkOverlay::Get().ResetExpiredDialogState();
+	Super::NativeDestruct();
 }
 
 /**
@@ -126,14 +243,6 @@ FText UTrialExpiredWidgetBase::GetMessageText_Implementation() const
 }
 
 /**
- * @brief 获取关闭按钮文本（可在蓝图重写）
- */
-FText UTrialExpiredWidgetBase::GetCloseButtonText_Implementation() const
-{
-    return FText::FromString(TEXT("关闭 | Close"));
-}
-
-/**
  * @brief 获取退出按钮文本（可在蓝图重写）
  */
 FText UTrialExpiredWidgetBase::GetQuitButtonText_Implementation() const
@@ -167,6 +276,92 @@ void UTrialExpiredWidgetBase::CopyTrialRequestToClipboard()
         FPlatformApplicationMisc::ClipboardCopy(*TrialRequest);
         UE_LOG(LogTemp, Log, TEXT("[TrialLicense] Trial request copied to clipboard"));
     }
+}
+
+bool UTrialExpiredWidgetBase::ExportTrialRequestToFile(const FString& FilePath)
+{
+    if (UTrialLicenseSubsystem* Subsystem = GetTrialLicenseSubsystem())
+    {
+        const bool bSuccess = Subsystem->ExportTrialRequestToFile(FilePath);
+        FileOperationStatusMessage = Subsystem->GetLastFileOperationMessage();
+        return bSuccess;
+    }
+    FileOperationStatusMessage = TEXT("无法访问许可证子系统 | Cannot access license subsystem");
+    return false;
+}
+
+bool UTrialExpiredWidgetBase::ExportTrialRequestWithDialog()
+{
+    if (UTrialLicenseSubsystem* Subsystem = GetTrialLicenseSubsystem())
+    {
+        const bool bSuccess = Subsystem->ExportTrialRequestWithDialog();
+        FileOperationStatusMessage = Subsystem->GetLastFileOperationMessage();
+        return bSuccess;
+    }
+    FileOperationStatusMessage = TEXT("无法访问许可证子系统 | Cannot access license subsystem");
+    return false;
+}
+
+bool UTrialExpiredWidgetBase::ImportLicenseFromFile(const FString& FilePath)
+{
+    if (UTrialLicenseSubsystem* Subsystem = GetTrialLicenseSubsystem())
+    {
+        const bool bSuccess = Subsystem->ImportLicenseFromFile(FilePath);
+        FileOperationStatusMessage = Subsystem->GetLastFileOperationMessage();
+        if (bSuccess)
+        {
+            ValidationStatusMessage = FileOperationStatusMessage;
+            bValidationSuccess = true;
+            OnLicenseValidated();
+        }
+        return bSuccess;
+    }
+    FileOperationStatusMessage = TEXT("无法访问许可证子系统 | Cannot access license subsystem");
+    return false;
+}
+
+bool UTrialExpiredWidgetBase::ImportLicenseWithDialog()
+{
+    if (UTrialLicenseSubsystem* Subsystem = GetTrialLicenseSubsystem())
+    {
+        const bool bSuccess = Subsystem->ImportLicenseWithDialog();
+        FileOperationStatusMessage = Subsystem->GetLastFileOperationMessage();
+        if (bSuccess)
+        {
+            ValidationStatusMessage = FileOperationStatusMessage;
+            bValidationSuccess = true;
+            OnLicenseValidated();
+        }
+        return bSuccess;
+    }
+    FileOperationStatusMessage = TEXT("无法访问许可证子系统 | Cannot access license subsystem");
+    return false;
+}
+
+FText UTrialExpiredWidgetBase::GetFileOperationStatusText() const
+{
+    return FText::FromString(FileOperationStatusMessage);
+}
+
+FText UTrialExpiredWidgetBase::GetLicenseWatermarkStatusText() const
+{
+    if (UTrialLicenseSubsystem* Subsystem = GetTrialLicenseSubsystem())
+    {
+        const UTrialLicenseSettings* Settings = GetDefault<UTrialLicenseSettings>();
+        const FString LicenseKey = Settings ? Settings->LicenseKey : FString();
+        if (LicenseKey.IsEmpty())
+        {
+            return FText::FromString(TEXT("当前未加载许可证，水印显示使用项目默认策略。"));
+        }
+
+        const FTrialLicenseInfo Info = Subsystem->ParseLicenseKey(LicenseKey);
+        return FText::FromString(
+            Info.bShowWatermark
+                ? TEXT("当前许可证要求显示水印。")
+                : TEXT("当前许可证要求隐藏水印。"));
+    }
+
+    return FText::FromString(TEXT("无法读取当前许可证的水印状态。"));
 }
 
 /**
@@ -205,25 +400,114 @@ FString UTrialExpiredWidgetBase::GetProjectID() const
 }
 
 /**
+ * @brief 获取验证按钮文本（可在蓝图重写）
+ */
+FText UTrialExpiredWidgetBase::GetValidateButtonText_Implementation() const
+{
+    return FText::FromString(TEXT("验证许可证 | Validate"));
+}
+
+/**
+ * @brief 验证许可证密钥
+ */
+bool UTrialExpiredWidgetBase::ValidateLicenseKey(const FString& LicenseKey)
+{
+    bValidationSuccess = false;
+    ValidationStatusMessage = TEXT("");
+
+    // 检查输入是否为空
+    if (LicenseKey.IsEmpty())
+    {
+        ValidationStatusMessage = TEXT("❌ 请输入许可证密钥 | Please enter a license key");
+        return false;
+    }
+
+    // 获取子系统进行验证
+    UTrialLicenseSubsystem* Subsystem = GetTrialLicenseSubsystem();
+    if (!Subsystem)
+    {
+        ValidationStatusMessage = TEXT("❌ 无法访问许可证子系统 | Cannot access license subsystem");
+        return false;
+    }
+
+    // 验证许可证
+    if (Subsystem->ValidateLicense(LicenseKey))
+    {
+        // 解析许可证信息
+        FTrialLicenseInfo Info = Subsystem->ParseLicenseKey(LicenseKey);
+        
+        if (Info.bPerpetual)
+        {
+            ValidationStatusMessage = TEXT("✓ 永久许可证验证成功！| Perpetual license validated successfully!");
+        }
+        else
+        {
+            const float RemainingTimeValue = Subsystem->GetTrialRemainingTime(LicenseKey);
+            const FString RemainingCN = FormatRemainingTimeSegmentedCN_UMG(RemainingTimeValue);
+            const FString RemainingEN = FormatRemainingTimeSegmentedEN_UMG(RemainingTimeValue);
+            
+            ValidationStatusMessage = FString::Printf(
+                TEXT("✓ 许可证验证成功！剩余 %s | License validated! %s remaining"),
+                *RemainingCN,
+                *RemainingEN
+            );
+        }
+        
+        bValidationSuccess = true;
+        
+        // 更新设置中的许可证密钥
+        if (UTrialLicenseSettings* Settings = GetMutableDefault<UTrialLicenseSettings>())
+        {
+            Settings->LicenseKey = LicenseKey;
+            Settings->SaveConfig();
+            UE_LOG(LogTemp, Log, TEXT("[TrialLicense] License key updated in settings"));
+        }
+
+        // 触发蓝图事件
+        OnLicenseValidated();
+
+        // 延迟关闭弹窗，让用户看到成功消息
+        FTimerHandle TimerHandle;
+        if (GetWorld())
+        {
+            GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this]()
+            {
+                CloseDialog();
+            }, 2.0f, false);
+        }
+
+        return true;
+    }
+    else
+    {
+        ValidationStatusMessage = TEXT("❌ 许可证验证失败！请检查密钥是否正确 | License validation failed! Please check the key");
+        bValidationSuccess = false;
+        return false;
+    }
+}
+
+/**
+ * @brief 获取验证状态消息文本
+ */
+FText UTrialExpiredWidgetBase::GetValidationStatusText() const
+{
+    return FText::FromString(ValidationStatusMessage);
+}
+
+/**
+ * @brief 获取验证是否成功
+ */
+bool UTrialExpiredWidgetBase::IsValidationSuccessful() const
+{
+    return bValidationSuccess;
+}
+
+/**
  * @brief 组合试用请求信息文本
  *
- * 包含项目ID、机器ID、试用请求加密串及说明。
+ * 返回缓存的试用请求信息，包含项目ID、机器ID、试用请求加密串及说明。
  */
 FText UTrialExpiredWidgetBase::GetTrialRequestInfo() const
 {
-    const FString MachineID = GetMachineID();
-    const FString ProjectID = GetProjectID();
-    const FString TrialRequest = const_cast<UTrialExpiredWidgetBase*>(this)->GenerateTrialRequestString();
-
-    FString InfoText = FString::Printf(
-        TEXT("项目ID | Project ID:\n%s\n\n机器ID | Machine ID:\n%s\n\n试用请求 | Trial Request:\n%s\n\n"),
-        *ProjectID,
-        *MachineID,
-        *TrialRequest
-    );
-    
-    InfoText += TEXT("说明：请将上述\"试用请求\"发送给开发者以获取许可证密钥。\n");
-    InfoText += TEXT("Note: Send the above \"Trial Request\" to the developer to obtain a license key.");
-
-    return FText::FromString(InfoText);
+    return CachedTrialRequestInfo;
 }

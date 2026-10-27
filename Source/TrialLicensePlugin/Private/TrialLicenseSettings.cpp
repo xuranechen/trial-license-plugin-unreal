@@ -26,7 +26,6 @@ UTrialLicenseSettings::UTrialLicenseSettings()
     bEnableEditorPreview = false;
     WatermarkText = TEXT("Trial Version");
     LicenseKey = TEXT("");
-    PassPhrase = TEXT("");
     WatermarkOpacity = 0.12f;
     WatermarkFontSize = 48;
     WatermarkAngle = -30.f;
@@ -40,6 +39,7 @@ UTrialLicenseSettings::UTrialLicenseSettings()
     ExpiredWidgetClass = FSoftClassPath(); // 留空使用默认Slate弹窗
     bUseUMGWidget = false; // 默认使用Slate版本
     bAutoShowExpiredDialog = true;
+    bDefaultTrialLicenseShowWatermark = true;
 }
 
 /**
@@ -151,8 +151,7 @@ void UTrialLicenseSettings::PostEditChangeProperty(FPropertyChangedEvent& Proper
         Overlay.DetachFromViewport();
         Overlay.Initialize();
     }
-    else if (PropertyName == GET_MEMBER_NAME_CHECKED(UTrialLicenseSettings, LicenseKey) ||
-             PropertyName == GET_MEMBER_NAME_CHECKED(UTrialLicenseSettings, PassPhrase))
+    else if (PropertyName == GET_MEMBER_NAME_CHECKED(UTrialLicenseSettings, LicenseKey))
     {
         // 许可证信息变更，需要重新初始化以更新缓存
         Overlay.Shutdown();

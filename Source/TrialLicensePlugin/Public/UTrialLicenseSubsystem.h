@@ -29,41 +29,57 @@ public:
 	 * @brief 生成许可证密钥
 	 *
 	 * 根据指定的参数生成加密的许可证密钥字符串。
+	 * 加密口令自动使用项目名称 (FApp::GetProjectName())。
 	 *
 	 * @param DurationHours 试用时长（小时）
 	 * @param ExpiryDate 过期日期
-	 * @param PassPhrase 密码短语，用于加密
 	 * @param ProjectId 项目标识符
 	 * @param TargetMachineID 目标机器ID
 	 * @param bPerpetual 是否为永久许可证
 	 * @return 生成的加密许可证密钥字符串
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Trial License")
-	FString GenerateLicenseKey(float DurationHours, const FDateTime& ExpiryDate, const FString& PassPhrase, const FString& ProjectId, const FString& TargetMachineID, bool bPerpetual);
+	FString GenerateLicenseKey(float DurationHours, const FDateTime& ExpiryDate, const FString& ProjectId, const FString& TargetMachineID, bool bPerpetual);
+
+	UFUNCTION(BlueprintCallable, Category = "Trial License")
+	FString GenerateLicenseKeyAdvanced(float DurationHours, const FDateTime& ExpiryDate, const FString& ProjectId, const FString& TargetMachineID, bool bPerpetual, bool bShowWatermark);
 
 	/**
 	 * @brief 解析许可证密钥
 	 *
 	 * 解密并解析许可证密钥字符串，返回许可证信息结构体。
+	 * 解密口令自动使用项目名称 (FApp::GetProjectName())。
 	 *
 	 * @param LicenseKey 要解析的许可证密钥
-	 * @param PassPhrase 用于解密的密码短语
 	 * @return 解析出的许可证信息结构体
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Trial License")
-	FTrialLicenseInfo ParseLicenseKey(const FString& LicenseKey, const FString& PassPhrase);
+	FTrialLicenseInfo ParseLicenseKey(const FString& LicenseKey);
+
+	UFUNCTION(BlueprintCallable, Category = "Trial License")
+	FTrialLicenseInfo ParseCurrentLicenseKey();
 
 	/**
 	 * @brief 验证许可证
 	 *
 	 * 验证许可证密钥的有效性，包括签名验证、过期检查、设备绑定等。
+	 * 验证口令自动使用项目名称 (FApp::GetProjectName())。
 	 *
 	 * @param LicenseKey 要验证的许可证密钥
-	 * @param PassPhrase 用于验证的密码短语
 	 * @return true如果许可证有效，false如果无效
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Trial License")
-	bool ValidateLicense(const FString& LicenseKey, const FString& PassPhrase);
+	bool ValidateLicense(const FString& LicenseKey);
+
+	/**
+	 * @brief 获取最近一次许可证验证失败原因
+	 *
+	 * ValidateLicense 返回 false 后可读取该值，用于界面提示与调试。
+	 *
+	 * @return 失败原因文本；成功或尚未验证时可能为空
+	 */
+	UFUNCTION(BlueprintPure, Category = "Trial License")
+	FString GetLastValidationError() const;
 
 	/**
 	 * @brief 获取试用剩余时间
@@ -71,11 +87,10 @@ public:
 	 * 计算并返回许可证的剩余试用时间（秒）。
 	 *
 	 * @param LicenseKey 许可证密钥
-	 * @param PassPhrase 密码短语
 	 * @return 剩余试用时间（秒），负值表示已过期
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Trial License")
-	float GetTrialRemainingTime(const FString& LicenseKey, const FString& PassPhrase);
+	float GetTrialRemainingTime(const FString& LicenseKey);
 
 	/**
 	 * @brief 获取机器ID
@@ -133,19 +148,34 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Trial License")
 	FString GenerateTrialRequest();
 
+	UFUNCTION(BlueprintCallable, Category = "Trial License|File")
+	bool ExportTrialRequestToFile(const FString& FilePath);
+
+	UFUNCTION(BlueprintCallable, Category = "Trial License|File")
+	bool ExportTrialRequestWithDialog();
+
+	UFUNCTION(BlueprintCallable, Category = "Trial License|File")
+	bool ImportLicenseFromFile(const FString& FilePath);
+
+	UFUNCTION(BlueprintCallable, Category = "Trial License|File")
+	bool ImportLicenseWithDialog();
+
+	UFUNCTION(BlueprintPure, Category = "Trial License|File")
+	FString GetLastFileOperationMessage() const;
+
 	/**
 	 * @brief 解析试用请求
 	 *
 	 * 解析加密的试用请求，提取项目ID和机器ID信息。
+	 * 解密口令自动使用项目名称 (FApp::GetProjectName())。
 	 *
 	 * @param EncryptedRequest 加密的试用请求字符串
-	 * @param PassPhrase 用于解密的密码短语
 	 * @param OutProjectId 输出参数：项目ID
 	 * @param OutMachineID 输出参数：机器ID
 	 * @return true如果解析成功，false如果失败
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Trial License")
-	bool ParseTrialRequest(const FString& EncryptedRequest, const FString& PassPhrase, FString& OutProjectId, FString& OutMachineID);
+	bool ParseTrialRequest(const FString& EncryptedRequest, FString& OutProjectId, FString& OutMachineID);
 
 	/**
 	 * @brief 设置水印是否启用
@@ -302,6 +332,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Trial License|Dialog")
 	void ShowExpiredDialog(const FString& Reason = TEXT(""), float RemainingTime = 0.f, bool bIsPerpetual = false);
 
+	/**
+	 * @brief 验证本地保存的证书是否有效
+	 *
+	 * 检查本地保存的证书数据是否存在且有效。验证内容包括：
+	 * 1. 证书文件是否存在
+	 * 2. 证书数据是否可以正确解密和解析
+	 * 3. 机器ID是否匹配当前设备
+	 * 4. 证书哈希是否存在
+	 * 
+	 * 该函数可在蓝图中调用，无需任何输入参数。
+	 *
+	 * @return true 如果本地证书存在且有效，false 如果证书不存在、损坏或机器ID不匹配
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Trial License")
+	bool IsLocalLicenseValid();
+
+	UFUNCTION(BlueprintCallable, Category = "Trial License|Watermark")
+	void RefreshLicenseRuntimeState();
+
 	// 内部工具方法
 	FString SHA256Hash(const FString& Input);
 	FString AESEncrypt(const FString& Input, const FString& Key);
@@ -316,10 +365,18 @@ private:
 	FString TrialSessionHash;
 	FString TrialSessionMachineID;
 	FTSTicker::FDelegateHandle TrialTickerHandle;
+	FTSTicker::FDelegateHandle LicenseMonitorTickerHandle;
 	double TrialLastFlushedSessionSeconds;
 	double TrialFlushIntervalSeconds;
 	bool bTrialPeriodicEnabled;
+	double LastLicenseMonitorCheckTime;
+	FString LastValidationError;
+	FString LastFileOperationMessage;
 
 	// 定时器回调函数
 	static bool TrialPeriodicFlushTick(float DeltaTime, UTrialLicenseSubsystem* Subsystem);
+	static bool LicenseMonitorTick(float DeltaTime, UTrialLicenseSubsystem* Subsystem);
+	bool PersistValidatedLicenseKey(const FString& LicenseKey, const FTrialLicenseInfo& LicenseInfo);
+	void UpdateWatermarkVisibilityForLicense(const FString& LicenseKey);
+	void CheckAndHandleLicenseExpiry(const FString& LicenseKey);
 };

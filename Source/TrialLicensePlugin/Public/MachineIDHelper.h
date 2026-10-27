@@ -51,4 +51,9 @@ private:
 	 * @return 硬盘序列号字符串，如果无法获取则返回空字符串
 	 */
 	static FString GetHardDiskSerial();
+
+	static FString GetMachineIDCachePath();
+	static FString LoadCachedMachineID();
+	static bool SaveCachedMachineID(const FString& MachineID);
+	static FString BuildStableFingerprint();
 };

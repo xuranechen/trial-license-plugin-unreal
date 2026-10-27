@@ -49,6 +49,11 @@ static float GWatermarkVerticalOffset = 0.f;
  */
 static UTrialLicenseSubsystem* GetTrialLicenseSubsystemForOverlay()
 {
+	if (!GEngine)
+	{
+		return nullptr;
+	}
+
 	if (UWorld* World = GEngine->GetCurrentPlayWorld())
 	{
 		if (UGameInstance* GameInstance = UGameplayStatics::GetGameInstance(World))
@@ -59,8 +64,23 @@ static UTrialLicenseSubsystem* GetTrialLicenseSubsystemForOverlay()
 			}
 		}
 	}
+
+	for (const FWorldContext& WorldContext : GEngine->GetWorldContexts())
+	{
+		if (UWorld* World = WorldContext.World())
+		{
+			if (UGameInstance* GameInstance = World->GetGameInstance())
+			{
+				if (UTrialLicenseSubsystem* Subsystem = GameInstance->GetSubsystem<UTrialLicenseSubsystem>())
+				{
+					return Subsystem;
+				}
+			}
+		}
+	}
+
 	// 回退方案：尝试从GEngine获取
-	if (GEngine && GEngine->GameViewport)
+	if (GEngine->GameViewport)
 	{
 		if (UGameInstance* GameInstance = GEngine->GameViewport->GetGameInstance())
 		{
@@ -89,12 +109,14 @@ FTrialWatermarkOverlay& FTrialWatermarkOverlay::Get()
  */
 void FTrialWatermarkOverlay::Initialize()
 {
+    // 重置过期对话框标志位，确保每次启动都能重新显示
+    bExpiredDialogShown = false;
+
     // Prefer project settings
     if (const UTrialLicenseSettings* Settings = GetDefault<UTrialLicenseSettings>())
     {
         GWatermarkEnabled = Settings->WatermarkEnabled;
         CachedLicenseKey = Settings->LicenseKey;
-        CachedPassPhrase = Settings->PassPhrase;
         BaseText = Settings->WatermarkText;
         GWatermarkOpacity = Settings->WatermarkOpacity;
         GWatermarkFontSize = Settings->WatermarkFontSize;
@@ -107,7 +129,6 @@ void FTrialWatermarkOverlay::Initialize()
     {
         GConfig->GetBool(TEXT("TrialLicensePlugin"), TEXT("WatermarkEnabled"), GWatermarkEnabled, GGameIni);
         GConfig->GetString(TEXT("TrialLicensePlugin"), TEXT("LicenseKey"), CachedLicenseKey, GGameIni);
-        GConfig->GetString(TEXT("TrialLicensePlugin"), TEXT("PassPhrase"), CachedPassPhrase, GGameIni);
         GConfig->GetString(TEXT("TrialLicensePlugin"), TEXT("WatermarkText"), BaseText, GGameIni);
         GConfig->GetFloat(TEXT("TrialLicensePlugin"), TEXT("WatermarkOpacity"), GWatermarkOpacity, GGameIni);
         GConfig->GetInt(TEXT("TrialLicensePlugin"), TEXT("WatermarkFontSize"), GWatermarkFontSize, GGameIni);
@@ -158,56 +179,27 @@ void FTrialWatermarkOverlay::Shutdown()
  */
 bool FTrialWatermarkOverlay::Tick(float /*DeltaTime*/)
 {
-    if (!bEnabled)
-    {
-        if (RootOverlayWidget.IsValid())
-        {
-            RootOverlayWidget.Pin()->SetVisibility(EVisibility::Collapsed);
-        }
-        return true; // keep ticking to handle re-enable
-    }
+	if (!bEnabled)
+	{
+		if (RootOverlayWidget.IsValid())
+		{
+			RootOverlayWidget.Pin()->SetVisibility(EVisibility::Collapsed);
+		}
+	}
+	else if (RootOverlayWidget.IsValid())
+	{
+		RootOverlayWidget.Pin()->SetVisibility(EVisibility::Visible);
+	}
 
-    if (!bAttached)
-    {
-        TryAttachToViewport();
-    }
+	if (bEnabled && !bAttached)
+	{
+		TryAttachToViewport();
+	}
 
-    UpdateWatermarkText();
-
-    // 定期检查证书是否过期（每10秒检查一次）
-    const double CurrentTime = FPlatformTime::Seconds();
-    if (!bExpiredDialogShown && (CurrentTime - LastExpireCheckTime > 10.0))
-    {
-        LastExpireCheckTime = CurrentTime;
-
-        if (!CachedLicenseKey.IsEmpty() && !CachedPassPhrase.IsEmpty())
-        {
-            if (UTrialLicenseSubsystem* Subsystem = GetTrialLicenseSubsystemForOverlay())
-            {
-                const float RemainingTime = Subsystem->GetTrialRemainingTime(CachedLicenseKey, CachedPassPhrase);
-                const FTrialLicenseInfo Info = Subsystem->ParseLicenseKey(CachedLicenseKey, CachedPassPhrase);
-
-                // 如果试用时间已耗尽（且不是永久授权）
-                if (!Info.bPerpetual && RemainingTime <= 0.f)
-                {
-                    ShowExpiredDialog(
-                        TEXT("您的试用期已到期，请联系开发者获取正式许可证。\n\nYour trial period has expired. Please contact the developer for a full license."),
-                        RemainingTime,
-                        Info.bPerpetual
-                    );
-                }
-                // 如果证书验证失败
-                else if (!Subsystem->ValidateLicense(CachedLicenseKey, CachedPassPhrase))
-                {
-                    ShowExpiredDialog(
-                        TEXT("许可证验证失败，可能是设备不匹配或证书已被篡改。\n\nLicense validation failed. Device mismatch or certificate tampering detected."),
-                        RemainingTime,
-                        Info.bPerpetual
-                    );
-                }
-            }
-        }
-    }
+	if (bEnabled)
+	{
+		UpdateWatermarkText();
+	}
 
     return true;
 }
@@ -317,20 +309,19 @@ void FTrialWatermarkOverlay::UpdateWatermarkText()
 
     FString DisplayBase = BaseText.IsEmpty() ? TEXT("Trial Version") : BaseText;
 
-    if (CachedLicenseKey.IsEmpty() || CachedPassPhrase.IsEmpty())
+    if (CachedLicenseKey.IsEmpty())
     {
-        const FString Text = FString::Printf(TEXT("%s | 未配置许可证/口令"), *DisplayBase);
+        const FString Text = FString::Printf(TEXT("%s | 未配置许可证"), *DisplayBase);
         WatermarkWidget.Pin()->SetText(FText::FromString(Text));
         return;
     }
 
     if (UTrialLicenseSubsystem* Subsystem = GetTrialLicenseSubsystemForOverlay())
     {
-        const FTrialLicenseInfo Info = Subsystem->ParseLicenseKey(CachedLicenseKey, CachedPassPhrase);
+        const FTrialLicenseInfo Info = Subsystem->ParseLicenseKey(CachedLicenseKey);
 
-        if (Info.bPerpetual)
+        if (!Info.bShowWatermark)
         {
-            // 永久授权隐藏
             if (RootOverlayWidget.IsValid())
             {
                 RootOverlayWidget.Pin()->SetVisibility(EVisibility::Collapsed);
@@ -345,7 +336,7 @@ void FTrialWatermarkOverlay::UpdateWatermarkText()
             }
         }
 
-        const float RemainingSeconds = Subsystem->GetTrialRemainingTime(CachedLicenseKey, CachedPassPhrase);
+        const float RemainingSeconds = Subsystem->GetTrialRemainingTime(CachedLicenseKey);
 
         int32 RemainH = 0, RemainM = 0, RemainS = 0;
         if (RemainingSeconds > 0.f)
@@ -521,15 +512,14 @@ void FTrialWatermarkOverlay::ShowExpiredDialog(const FString& Reason, float Rema
                 UTrialExpiredWidgetBase* ExpiredWidget = CreateWidget<UTrialExpiredWidgetBase>(GEngine->GameViewport->GetWorld(), WidgetClass);
                 if (ExpiredWidget)
                 {
-                    // 初始化数据
-                    ExpiredWidget->InitializeExpiredWidget(Reason, RemainingTime, bIsPerpetual);
-                    
-                    // 添加到视口
-                    ExpiredWidget->AddToViewport(1000); // 高层级确保显示在最前面
-
-                    bExpiredDialogShown = true;
-                    UE_LOG(LogTemp, Log, TEXT("[TrialLicense] UMG expired dialog shown. Reason: %s"), *Reason);
-                    return;
+					// 初始化数据
+					ExpiredWidget->InitializeExpiredWidget(Reason, RemainingTime, bIsPerpetual);
+					bExpiredDialogShown = true;
+					
+					// 添加到视口
+					ExpiredWidget->AddToViewport(1000); // 高层级确保显示在最前面
+					UE_LOG(LogTemp, Log, TEXT("[TrialLicense] UMG expired dialog shown. Reason: %s"), *Reason);
+					return;
                 }
             }
             else
@@ -552,21 +542,38 @@ void FTrialWatermarkOverlay::ShowExpiredDialog(const FString& Reason, float Rema
         .RemainingTime(RemainingTime)
         .bIsPerpetual(bIsPerpetual);
 
-    // 创建弹窗窗口
-    TSharedRef<SWindow> ExpiredWindow = SNew(SWindow)
+    // 创建弹窗窗口（无图标、无标题栏，完全自定义）
+	TSharedRef<SWindow> ExpiredWindow = SNew(SWindow)
         .Title(FText::FromString(TEXT("试用许可证提示 | Trial License Notice")))
-        .ClientSize(FVector2D(650.f, 500.f))
+        .ClientSize(FVector2D(800.f, 600.f))
         .SupportsMaximize(false)
         .SupportsMinimize(false)
         .IsTopmostWindow(true)
-        .SizingRule(ESizingRule::FixedSize)
-        [
-            ExpiredWidget.ToSharedRef()
-        ];
+        .SizingRule(ESizingRule::UserSized)
+        .HasCloseButton(false)
+        .CreateTitleBar(false)
+		[
+			ExpiredWidget.ToSharedRef()
+		];
 
-    // 显示为模态窗口
-    FSlateApplication::Get().AddModalWindow(ExpiredWindow, FSlateApplication::Get().GetActiveTopLevelWindow());
+	bExpiredDialogShown = true;
 
-    bExpiredDialogShown = true;
-    UE_LOG(LogTemp, Log, TEXT("[TrialLicense] Default Slate expired dialog shown. Reason: %s"), *Reason);
+	// 显示为模态窗口
+	FSlateApplication::Get().AddModalWindow(ExpiredWindow, FSlateApplication::Get().GetActiveTopLevelWindow());
+	bExpiredDialogShown = false;
+	UE_LOG(LogTemp, Log, TEXT("[TrialLicense] Default Slate expired dialog shown. Reason: %s"), *Reason);
+}
+
+void FTrialWatermarkOverlay::OnLicenseValidated(const FString& NewLicenseKey)
+{
+    CachedLicenseKey = NewLicenseKey;
+    bExpiredDialogShown = false;
+    LastExpireCheckTime = 0.0;
+    UpdateWatermarkText();
+	UE_LOG(LogTemp, Log, TEXT("[TrialLicense] Overlay cache refreshed after license validation. KeyLen=%d"), CachedLicenseKey.Len());
+}
+
+void FTrialWatermarkOverlay::ResetExpiredDialogState()
+{
+	bExpiredDialogShown = false;
 }

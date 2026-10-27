@@ -126,6 +126,14 @@ public:
     void ShowExpiredDialog(const FString& Reason = TEXT(""), float RemainingTime = 0.f, bool bIsPerpetual = false);
 
 	/**
+	 * @brief 许可证验证成功后刷新覆盖层缓存
+	 *
+	 * 用于在运行时输入新许可证后立即生效，避免继续使用旧缓存密钥。
+	 */
+	void OnLicenseValidated(const FString& NewLicenseKey);
+	void ResetExpiredDialogState();
+
+	/**
 	 * @brief 获取水印是否启用
 	 *
 	 * @return true如果水印已启用，false如果已禁用
@@ -195,7 +203,6 @@ private:
     FTSTicker::FDelegateHandle TickerHandle;
     bool bAttached = false;
     FString CachedLicenseKey;
-    FString CachedPassPhrase;
     FString BaseText;
     bool bEnabled = true;
     float AngleDegrees = -30.f;

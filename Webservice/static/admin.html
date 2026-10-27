@@ -234,6 +234,7 @@
             <div class="form-group"><label class="form-label">或手动输入设备ID</label><input class="form-control" id="issueMachineId" placeholder="指定设备ID" required /></div>
             <div class="form-group"><label class="form-label">许可证类型</label><select class="form-control" id="issueLicenseType" required><option value="trial">试用版</option><option value="daily">天卡</option><option value="weekly">周卡</option><option value="monthly">月卡</option><option value="quarterly">季卡</option><option value="yearly">年卡</option><option value="perpetual">永久授权</option></select></div>
             <div class="form-group" id="issueDurationGroup"><label class="form-label">试用时长（小时）</label><input type="number" min="1" step="1" class="form-control" id="issueDurationHours" placeholder="留空则使用默认试用时长" /></div>
+            <div class="form-group"><label class="form-label"><input type="checkbox" id="issueShowWatermark" checked /> 是否显示水印</label></div>
             <div class="btn-group"><button class="btn btn-primary" type="submit">下发许可证</button><button class="btn btn-secondary" type="button" onclick="closeIssueLicenseModal()">取消</button></div>
           </form>
         </div>
@@ -242,15 +243,17 @@
 
     <div id="benefitModal" class="modal">
       <div class="modal-content">
-        <div class="modal-header"><h2 class="modal-title">试用权益调整</h2><button class="modal-close" onclick="closeBenefitModal()">&times;</button></div>
+        <div class="modal-header"><h2 class="modal-title">试用能力调整</h2><button class="modal-close" onclick="closeBenefitModal()">&times;</button></div>
         <div class="modal-body">
           <div id="benefitError" class="alert alert-danger hidden"></div>
-          <div class="alert alert-info" style="margin-bottom: 16px;">按应用增加该用户的额外试用次数和时长，门户申请试用时会直接叠加生效。</div>
+          <div class="alert alert-info" style="margin-bottom: 16px;">按应用调整试用能力，数值支持正负调整（结果不能小于 0）。</div>
           <form id="benefitForm">
             <div class="form-group"><label class="form-label">应用</label><select class="form-control" id="benefitProjectId" required><option value="">请选择应用</option></select></div>
-            <div class="form-group"><label class="form-label">额外试用次数</label><input type="number" min="0" class="form-control" id="benefitTrialRequests" value="0" required /></div>
-            <div class="form-group"><label class="form-label">额外试用时长（小时）</label><input type="number" min="0" step="1" class="form-control" id="benefitTrialHours" value="0" required /></div>
-            <div class="btn-group"><button class="btn btn-primary" type="submit">保存试用权益</button><button class="btn btn-secondary" type="button" onclick="closeBenefitModal()">取消</button></div>
+            <div class="form-group"><label class="form-label">额外试用次数调整值</label><input type="number" class="form-control" id="benefitTrialRequests" value="0" required /></div>
+            <div class="form-group"><label class="form-label">单次试用时长加成调整值（小时）</label><input type="number" step="1" class="form-control" id="benefitTrialHours" value="0" required /></div>
+            <div class="form-group"><label class="form-label"><input type="checkbox" id="benefitAllowNoWatermark" /> 允许申请免水印试用</label></div>
+            <div class="form-group"><label class="form-label">额外免水印试用次数调整值</label><input type="number" class="form-control" id="benefitNoWatermarkRequests" value="0" required /></div>
+            <div class="btn-group"><button class="btn btn-primary" type="submit">保存试用能力</button><button class="btn btn-secondary" type="button" onclick="closeBenefitModal()">取消</button></div>
           </form>
         </div>
       </div>

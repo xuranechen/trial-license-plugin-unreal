@@ -46,7 +46,8 @@ public class TrialLicensePlugin : ModuleRules
 				"Slate",
 				"SlateCore",
 				"Json",
-				"JsonUtilities"
+				"JsonUtilities",
+				"DesktopPlatform"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

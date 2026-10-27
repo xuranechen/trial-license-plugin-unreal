@@ -1,15 +1,25 @@
 // 许可证管理模块
 const AdminLicenses = {
   licenses: [],
+  usersById: {},
 
   // 加载许可证列表
   async load() {
     AdminUI.showLoading("licensesList");
     
     try {
-      // 从API获取许可证列表
-      const licenses = await AdminAPI.get("/admin/licenses");
+      // 并行加载许可证和用户映射
+      const [licenses, users] = await Promise.all([
+        AdminAPI.get("/admin/licenses"),
+        AdminAPI.get("/admin/users"),
+      ]);
       this.licenses = Array.isArray(licenses) ? licenses : [];
+      this.usersById = (Array.isArray(users) ? users : []).reduce((acc, user) => {
+        if (user && user.id) {
+          acc[user.id] = user;
+        }
+        return acc;
+      }, {});
       this.renderLicenses(licenses);
     } catch (error) {
       AdminUI.showError("licensesList", "加载许可证失败: " + error.message);
@@ -46,11 +56,12 @@ const AdminLicenses = {
           <thead>
             <tr>
               <th>ID</th>
-              <th>许可证密钥</th>
+              <th>密钥</th>
               <th>项目ID</th>
-              <th>设备ID</th>
+              <th>设备</th>
               <th>用户ID</th>
               <th>类型</th>
+              <th>水印</th>
               <th>生成时间</th>
               <th>到期时间</th>
               <th>状态</th>
@@ -64,17 +75,36 @@ const AdminLicenses = {
               const expiryTime = isPerpetual ? '永久有效' : (license.expiry_time ? new Date(license.expiry_time).toLocaleString('zh-CN') : '-');
               const statusText = license.is_revoked ? '已撤销' : (license.is_expired ? '已过期' : '正常');
               const statusClass = license.is_revoked ? 'danger' : (license.is_expired ? 'warning' : 'success');
-               
+              const showWatermark = license.show_watermark !== false;
+              const watermarkText = showWatermark ? '有' : '免';
+              const watermarkClass = showWatermark ? 'warning' : 'success';
+              const fullLicenseKey = license.license_key || '-';
+              const shortLicenseKey = fullLicenseKey.length > 24
+                ? `${fullLicenseKey.slice(0, 10)}...${fullLicenseKey.slice(-8)}`
+                : fullLicenseKey;
+              const fullMachineId = license.machine_id || '-';
+              const shortMachineId = fullMachineId.length > 20
+                ? `${fullMachineId.slice(0, 8)}...${fullMachineId.slice(-6)}`
+                : fullMachineId;
+              const userName = (license.user_id && this.usersById[license.user_id]?.username)
+                ? this.usersById[license.user_id].username
+                : (license.user_id || '-');
+                
               return `
               <tr>
                 <td><span class="ellipsis-cell" title="${license.id}">${license.id}</span></td>
-                <td><code class="ellipsis-cell" title="${license.license_key}">${license.license_key.substring(0, 40)}...</code></td>
+                <td><code class="ellipsis-cell" title="${fullLicenseKey}">${shortLicenseKey}</code></td>
                 <td><span class="ellipsis-cell" title="${license.project_id || '-'}">${license.project_id || '-'}</span></td>
-                <td><span class="ellipsis-cell" title="${license.machine_id || '-'}">${license.machine_id || '-'}</span></td>
-                <td><span class="ellipsis-cell" title="${license.user_id || '-'}">${license.user_id || '-'}</span></td>
+                <td><span class="ellipsis-cell" title="${fullMachineId}">${shortMachineId}</span></td>
+                <td><span class="ellipsis-cell" title="${userName}">${userName}</span></td>
                 <td>
                   <span class="badge ${isPerpetual ? "success" : "info"}">
                     ${typeText}
+                  </span>
+                </td>
+                <td>
+                  <span class="badge ${watermarkClass}">
+                    ${watermarkText}
                   </span>
                 </td>
                 <td><span class="ellipsis-cell" title="${license.generate_time ? new Date(license.generate_time).toLocaleString('zh-CN') : '-'}">${license.generate_time ? new Date(license.generate_time).toLocaleString('zh-CN') : '-'}</span></td>
@@ -158,15 +188,25 @@ function viewLicenseDetail(id) {
   AdminAPI.get(`/admin/licenses/${id}`)
     .then((detail) => {
       const statusText = detail.is_revoked ? "已撤销" : (detail.is_expired ? "已过期" : "正常");
+      const watermarkText = detail.show_watermark === false ? "免水印" : "有水印";
+      const userName = (detail.user_id && AdminLicenses.usersById[detail.user_id]?.username)
+        ? AdminLicenses.usersById[detail.user_id].username
+        : (detail.user_id || "-");
+      const generateText = detail.generate_time
+        ? new Date(detail.generate_time).toLocaleString("zh-CN")
+        : "-";
+      const expireText = detail.expiry_time
+        ? new Date(detail.expiry_time).toLocaleString("zh-CN")
+        : (detail.is_perpetual ? "永久" : "-");
       AdminUI.showDetail("许可证详情", [
-        { label: "许可证 ID", value: detail.id },
-        { label: "许可证类型", value: detail.license_type },
-        { label: "项目 ID", value: detail.project_id || "-" },
-        { label: "设备 ID", value: detail.machine_id || "-" },
-        { label: "用户 ID", value: detail.user_id || "-" },
+        { label: "ID", value: detail.id },
+        { label: "类型", value: detail.license_type },
+        { label: "项目", value: detail.project_id || "-" },
+        { label: "设备", value: detail.machine_id || "-" },
+        { label: "用户名", value: userName },
+        { label: "水印", value: watermarkText },
         { label: "状态", value: statusText },
-        { label: "生成时间", value: detail.generate_time ? new Date(detail.generate_time).toLocaleString("zh-CN") : "-" },
-        { label: "到期时间", value: detail.expiry_time ? new Date(detail.expiry_time).toLocaleString("zh-CN") : (detail.is_perpetual ? "永久" : "-") },
+        { label: "时间", value: `生效 ${generateText} / 到期 ${expireText}` },
       ]);
     })
     .catch((error) => {

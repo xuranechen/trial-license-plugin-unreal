@@ -87,6 +87,15 @@ struct TRIALLICENSEPLUGIN_API FTrialLicenseInfo
 	bool bPerpetual = false;
 
 	/**
+	 * @brief 是否显示水印
+	 *
+	 * 允许许可证自身控制水印是否显示。缺失该字段的旧许可证将回退到默认策略：
+	 * 试用许可证显示水印，永久许可证隐藏水印。
+	 */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Trial License")
+	bool bShowWatermark = true;
+
+	/**
 	 * @brief 默认构造函数
 	 *
 	 * 初始化结构体，将生成时间和过期时间设置为当前时间。

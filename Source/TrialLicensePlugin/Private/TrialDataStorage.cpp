@@ -7,7 +7,7 @@
  * 数据通过AES加密存储在JSON文件中，确保数据的安全性和完整性。
  */
 #include "TrialDataStorage.h"
-#include "HAL/PlatformFilemanager.h"
+#include "HAL/PlatformFileManager.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonSerializer.h"
@@ -15,6 +15,7 @@
 #include "Serialization/JsonReader.h"
 #include "Dom/JsonObject.h"
 #include "LicenseEncryptor.h"
+#include "MachineIDHelper.h"
 #include "Engine/Engine.h"
 #include "Misc/EngineVersion.h"
 #include "Templates/UnrealTemplate.h"
@@ -170,4 +171,58 @@ void FTrialDataStorage::ResetTrialData()
 	{
 		FPlatformFileManager::Get().GetPlatformFile().DeleteFile(*FilePath);
 	}
+}
+
+/**
+ * @brief 验证本地保存的证书是否有效
+ *
+ * 检查本地保存的证书数据是否存在且有效。验证内容包括：
+ * 1. 证书文件是否存在
+ * 2. 证书数据是否可以正确解密和解析
+ * 3. 机器ID是否匹配当前设备
+ * 4. 证书哈希是否存在且非空
+ *
+ * @return true 如果本地证书存在且有效，false 如果证书不存在、损坏或机器ID不匹配
+ */
+bool FTrialDataStorage::IsLocalLicenseValid()
+{
+	FString LicenseKeyHash, MachineID;
+	float UsedSeconds = 0.0f;
+
+	// 尝试加载本地证书数据
+	if (!LoadTrialData(LicenseKeyHash, MachineID, UsedSeconds))
+	{
+		// 无法加载数据（文件不存在或解密失败）
+		return false;
+	}
+
+	// 验证证书哈希是否存在
+	if (LicenseKeyHash.IsEmpty())
+	{
+		return false;
+	}
+
+	// 验证机器ID是否存在
+	if (MachineID.IsEmpty())
+	{
+		return false;
+	}
+
+	// 获取当前机器ID
+	FString CurrentMachineID = FMachineIDHelper::GetMachineID();
+	if (CurrentMachineID.IsEmpty())
+	{
+		// 无法获取当前机器ID
+		return false;
+	}
+
+	// 验证机器ID是否匹配
+	if (MachineID != CurrentMachineID)
+	{
+		// 机器ID不匹配，证书可能被转移到其他设备
+		return false;
+	}
+
+	// 所有验证通过
+	return true;
 }

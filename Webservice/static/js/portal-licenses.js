@@ -83,6 +83,7 @@ const PortalLicenses = {
                 <th>项目ID</th>
                 <th>设备ID</th>
                 <th>类型</th>
+                <th>水印</th>
                 <th>生成时间</th>
                 <th>到期时间</th>
                 <th>状态</th>
@@ -100,6 +101,9 @@ const PortalLicenses = {
                   : "-";
                 const statusText = license.is_revoked ? "已撤销" : (license.is_expired ? "已过期" : "正常");
                 const statusClass = license.is_revoked ? "danger" : (license.is_expired ? "warning" : "success");
+                const showWatermark = license.show_watermark !== false;
+                const watermarkText = showWatermark ? "有" : "免";
+                const watermarkClass = showWatermark ? "warning" : "success";
                 const keyText = license.license_key ? `${license.license_key.substring(0, 40)}...` : (license.is_revoked ? "已撤销" : "已过期");
                 const actionButtons = (license.is_revoked || license.is_expired)
                   ? '<span class="text-muted">不可操作</span>'
@@ -111,6 +115,7 @@ const PortalLicenses = {
                     <td><span class="ellipsis-cell" title="${license.project_id || "-"}">${license.project_id || "-"}</span></td>
                     <td><span class="ellipsis-cell" title="${license.machine_id || "-"}">${license.machine_id || "-"}</span></td>
                     <td><span class="badge ${license.is_perpetual ? "success" : "info"}">${typeText}</span></td>
+                    <td><span class="badge ${watermarkClass}">${watermarkText}</span></td>
                     <td><span class="ellipsis-cell" title="${generateTime}">${generateTime}</span></td>
                     <td><span class="ellipsis-cell" title="${expiryTime}">${expiryTime}</span></td>
                     <td><span class="badge ${statusClass}">${statusText}</span></td>

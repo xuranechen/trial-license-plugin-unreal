@@ -73,15 +73,6 @@ private:
     TSharedRef<SWidget> GetContent();
 
     /**
-     * @brief 关闭按钮点击事件处理
-     *
-     * 关闭当前弹窗窗口，不退出应用程序。
-     *
-     * @return 事件处理结果
-     */
-    FReply OnCloseClicked();
-
-    /**
      * @brief 退出应用按钮点击事件处理
      *
      * 退出整个应用程序。
@@ -91,6 +82,15 @@ private:
     FReply OnQuitClicked();
 
     /**
+     * @brief 进入应用按钮点击事件处理
+     *
+     * 在许可证验证成功后关闭弹窗，继续进入应用。
+     *
+     * @return 事件处理结果
+     */
+    FReply OnEnterAppClicked();
+
+    /**
      * @brief 复制试用请求按钮点击事件处理
      *
      * 将试用请求信息复制到系统剪贴板，方便用户发送给开发者。
@@ -98,6 +98,17 @@ private:
      * @return 事件处理结果
      */
     FReply OnCopyTrialRequestClicked();
+    FReply OnExportTrialRequestClicked();
+    FReply OnImportLicenseClicked();
+
+    /**
+     * @brief 验证许可证按钮点击事件处理
+     *
+     * 解析并验证用户输入的许可证密钥，如果验证成功则关闭弹窗并刷新许可证状态。
+     *
+     * @return 事件处理结果
+     */
+    FReply OnValidateLicenseClicked();
 
     /**
      * @brief 获取标题文本
@@ -118,15 +129,6 @@ private:
     FText GetMessageText() const;
 
     /**
-     * @brief 获取关闭按钮文本
-     *
-     * 返回关闭按钮的显示文本。
-     *
-     * @return 关闭按钮文本
-     */
-    FText GetCloseButtonText() const;
-
-    /**
      * @brief 获取退出按钮文本
      *
      * 返回退出应用按钮的显示文本。
@@ -136,6 +138,50 @@ private:
     FText GetQuitButtonText() const;
 
     /**
+     * @brief 获取进入应用按钮文本
+     *
+     * @return 进入应用按钮文本
+     */
+    FText GetEnterButtonText() const;
+
+    /**
+     * @brief 获取验证按钮文本
+     *
+     * 返回验证许可证按钮的显示文本。
+     *
+     * @return 验证按钮文本
+     */
+    FText GetValidateButtonText() const;
+
+    /**
+     * @brief 获取许可证输入提示文本
+     *
+     * 返回许可证输入框的提示文本。
+     *
+     * @return 提示文本
+     */
+    FText GetLicenseInputHintText() const;
+
+    /**
+     * @brief 获取验证状态消息文本
+     *
+     * 返回许可证验证结果的状态消息。
+     *
+     * @return 状态消息文本
+     */
+    FText GetValidationStatusText() const;
+    FText GetLicenseWatermarkStatusText() const;
+
+    /**
+     * @brief 许可证输入文本变更回调
+     *
+     * 当用户修改许可证输入框内容时触发。
+     *
+     * @param InText 新的输入文本
+     */
+    void OnLicenseInputTextChanged(const FText& InText);
+
+    /**
      * @brief 获取复制按钮文本
      *
      * 返回复制试用请求按钮的显示文本。
@@ -143,6 +189,8 @@ private:
      * @return 复制按钮文本
      */
     FText GetCopyButtonText() const;
+    FText GetExportButtonText() const;
+    FText GetImportButtonText() const;
 
     /**
      * @brief 获取试用请求信息文本
@@ -171,4 +219,16 @@ private:
 
     /** @brief 是否为永久授权 */
     bool bIsPerpetual;
+
+    /** @brief 缓存的试用请求信息，避免每次 UI 刷新时重新生成 */
+    FText CachedTrialRequestInfo;
+
+    /** @brief 用户输入的许可证密钥 */
+    FString LicenseInputText;
+
+    /** @brief 验证状态消息 */
+    FString ValidationStatusMessage;
+
+    /** @brief 验证是否成功 */
+    bool bValidationSuccess;
 };
