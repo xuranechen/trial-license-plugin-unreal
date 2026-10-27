@@ -91,3 +91,13 @@ Thumbs.db
 
 # Cache files
 .cache/
+
+# Python 工具产物
+.ruff_cache/
+__pycache__/
+.pytest_cache/
+
+# SQLite 数据库运行产物
+*.db
+*.sqlite
+*.sqlite3

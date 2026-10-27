@@ -213,6 +213,20 @@ namespace
         }
         SHA256Final_Internal(Ctx, OutHash);
     }
+
+    /**
+     * @brief 计算口令的 CRC32 密钥种子
+     *
+     * 必须使用 UTF-8 字节长度，而不是 FString::Len()（TCHAR 个数）。
+     * Python 端使用 zlib.crc32(passphrase.encode("utf-8"))，两者只有在
+     * 纯 ASCII 口令下才恰好相等；一旦口令包含中文等非 ASCII 字符，
+     * 用 Key.Len() 会导致两端派生出不同的 AES 密钥，互相无法解密。
+     */
+    uint32 ComputeKeyCrc32(const FString& Key)
+    {
+        FTCHARToUTF8 Converted(*Key);
+        return FCrc::MemCrc32(Converted.Get(), Converted.Length());
+    }
 }
 
 /**
@@ -283,7 +297,7 @@ FString FLicenseEncryptor::AESEncrypt(const FString& Input, const FString& Key)
 
     // 准备密钥（简单从CRC派生）
     uint8 RawKey[32] = {0};
-    uint32 KeyHash = FCrc::MemCrc32((void*)TCHAR_TO_UTF8(*Key), Key.Len());
+    uint32 KeyHash = ComputeKeyCrc32(Key);
     for (int i = 0; i < 32; ++i)
     {
         RawKey[i] = static_cast<uint8>((KeyHash >> ((i % 4) * 8)) & 0xFF);
@@ -367,7 +381,7 @@ FString FLicenseEncryptor::AESDecrypt(const FString& Input, const FString& Key)
             {
                 // 生成密钥（与加密时相同）
                 uint8 RawKey[32] = {0};
-                uint32 KeyHash = FCrc::MemCrc32((void*)TCHAR_TO_UTF8(*Key), Key.Len());
+                uint32 KeyHash = ComputeKeyCrc32(Key);
                 for (int i = 0; i < 32; ++i)
                 {
                     RawKey[i] = static_cast<uint8>((KeyHash >> ((i % 4) * 8)) & 0xFF);
@@ -408,7 +422,7 @@ FString FLicenseEncryptor::AESDecrypt(const FString& Input, const FString& Key)
     {
         // 生成密钥（与加密时相同）
         uint8 RawKey[32] = {0};
-        uint32 KeyHash = FCrc::MemCrc32((void*)TCHAR_TO_UTF8(*Key), Key.Len());
+        uint32 KeyHash = ComputeKeyCrc32(Key);
         for (int i = 0; i < 32; ++i)
         {
             RawKey[i] = static_cast<uint8>((KeyHash >> ((i % 4) * 8)) & 0xFF);

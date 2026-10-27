@@ -25,7 +25,6 @@ from app.utils.dependencies import get_current_user, get_current_admin_user
 from app.services.payment_service import payment_service
 from app.services.encryption import EncryptionService
 from app.services.license_service import generate_paid_license_for_order
-import pandas as pd
 import io
 
 router = APIRouter(prefix="/orders", tags=["订单和支付"])

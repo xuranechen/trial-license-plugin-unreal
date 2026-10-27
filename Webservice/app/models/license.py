@@ -2,7 +2,17 @@
 许可证模型
 """
 
-from sqlalchemy import Column, String, Float, Boolean, DateTime, Enum, Text, BigInteger
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    Float,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.sql import func
 import enum
 from app.database import Base
@@ -36,7 +46,13 @@ class License(Base):
 
     __tablename__ = "licenses"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    # SQLite 只有 INTEGER PRIMARY KEY 才是 rowid 别名并能自增；
+    # 直接用 BIGINT 建表会导致插入时报 NOT NULL constraint failed: licenses.id。
+    id = Column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
     license_key = Column(Text, unique=True, nullable=False, comment="许可证密钥")
     project_id = Column(String(255), nullable=False, index=True, comment="项目标识")
     machine_id = Column(String(255), nullable=False, index=True, comment="设备ID")

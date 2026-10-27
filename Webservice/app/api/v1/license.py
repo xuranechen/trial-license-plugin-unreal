@@ -3,10 +3,12 @@
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response, BackgroundTasks
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import Optional
 import traceback
+from app.config import settings
 from app.database import get_db
 from app.schemas.license import (
     LicenseRequest,
@@ -22,7 +24,8 @@ from app.models.application import Application
 from app.models.license import License, LicenseType
 from app.models.user import User
 from app.models.order import Order, OrderStatus
-from app.utils.dependencies import get_current_user
+from app.models.payment import Payment, PaymentStatus
+from app.utils.dependencies import get_current_user, get_current_admin_user
 from app.services.license_service import (
     generate_paid_license_for_order,
     get_effective_passphrase,
@@ -661,12 +664,22 @@ async def request_trial_license(request: LicenseRequest, db: Session = Depends(g
             status_code=status.HTTP_404_NOT_FOUND, detail="应用不存在或已禁用"
         )
 
+    # 解析设备ID（UE 客户端以 project_id 作为加密密钥）
+    try:
+        machine_id = EncryptionService.parse_encrypted_token(
+            request.encrypted_token, request.project_id
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"加密口令无效: {str(e)}"
+        )
+
     # 检查是否已有试用许可证
     existing = (
         db.query(License)
         .filter(
             License.project_id == request.project_id,
-            License.machine_id == request.machine_id,
+            License.machine_id == machine_id,
             License.license_type == LicenseType.TRIAL,
             License.is_revoked == False,
         )
@@ -688,7 +701,7 @@ async def request_trial_license(request: LicenseRequest, db: Session = Depends(g
             expiry_date=expiry_time,
             passphrase=get_effective_passphrase(app, request.project_id),
             project_id=request.project_id,
-            machine_id=request.machine_id,
+            machine_id=machine_id,
             is_perpetual=False,
         )
     except Exception as e:
@@ -701,9 +714,9 @@ async def request_trial_license(request: LicenseRequest, db: Session = Depends(g
     license_record = License(
         license_key=license_key,
         project_id=request.project_id,
-        machine_id=request.machine_id,
+        machine_id=machine_id,
         email=request.email,
-        company=request.company,
+        company=None,
         user_id=request.user_id,
         license_type=LicenseType.TRIAL,
         duration_hours=app.trial_duration_hours,
@@ -736,7 +749,8 @@ async def purchase_license(request: LicenseRequest, db: Session = Depends(get_db
     """
     购买正式许可证（永久授权）（保留旧接口兼容性）
 
-    需要验证支付信息
+    必须先完成支付：payment_id 需能匹配到一条支付成功（success）的支付记录，
+    且该支付对应的订单已支付、属于同一应用、且未发放过许可证。
     """
     # 查询应用配置
     app = (
@@ -745,13 +759,61 @@ async def purchase_license(request: LicenseRequest, db: Session = Depends(get_db
         .first()
     )
 
-    if not app:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="应用不存在")
+    if not app or not app.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="应用不存在或已禁用"
+        )
 
-    # TODO: 验证支付信息
+    # 校验支付凭证：必须存在且支付成功
     if not request.payment_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="缺少支付凭证"
+        )
+
+    payment = (
+        db.query(Payment)
+        .filter(
+            or_(
+                Payment.transaction_id == request.payment_id,
+                Payment.payment_no == request.payment_id,
+                Payment.id == request.payment_id,
+            )
+        )
+        .first()
+    )
+
+    if not payment or payment.status != PaymentStatus.SUCCESS:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="支付凭证无效或支付尚未完成",
+        )
+
+    # 校验支付对应的订单，且订单属于同一应用
+    order = db.query(Order).filter(Order.id == payment.order_id).first()
+    if not order or order.application_id != app.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="支付凭证与应用不匹配"
+        )
+
+    if order.status != OrderStatus.PAID:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="订单尚未完成支付"
+        )
+
+    # 防止同一订单重复发放许可证
+    if db.query(License).filter(License.order_id == order.id).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="该订单已发放许可证"
+        )
+
+    # 解析设备ID（UE 客户端以 project_id 作为加密密钥）
+    try:
+        machine_id = EncryptionService.parse_encrypted_token(
+            request.encrypted_token, request.project_id
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"加密口令无效: {str(e)}"
         )
 
     # 生成永久许可证
@@ -764,7 +826,7 @@ async def purchase_license(request: LicenseRequest, db: Session = Depends(get_db
             expiry_date=expiry_time,
             passphrase=get_effective_passphrase(app, request.project_id),
             project_id=request.project_id,
-            machine_id=request.machine_id,
+            machine_id=machine_id,
             is_perpetual=True,
             show_watermark=False,
         )
@@ -774,14 +836,14 @@ async def purchase_license(request: LicenseRequest, db: Session = Depends(get_db
             detail=f"生成许可证失败: {str(e)}",
         )
 
-    # 保存到数据库
+    # 保存到数据库（许可证归属支付订单的所属用户）
     license_record = License(
         license_key=license_key,
         project_id=request.project_id,
-        machine_id=request.machine_id,
-        email=request.email,
-        company=request.company,
-        user_id=request.user_id,
+        machine_id=machine_id,
+        email=request.email or (order.user.email if order.user else None),
+        company=None,
+        user_id=order.user_id,
         license_type=LicenseType.PERPETUAL,
         duration_hours=0,
         generate_time=generate_time,
@@ -789,6 +851,7 @@ async def purchase_license(request: LicenseRequest, db: Session = Depends(get_db
         is_perpetual=True,
         show_watermark=False,
         uses_no_watermark_benefit=False,
+        order_id=order.id,
     )
 
     db.add(license_record)
@@ -871,11 +934,19 @@ async def validate_license(
 
 @router.post("/debug-decrypt")
 async def debug_decrypt_license(
-    request: ValidateLicenseRequest, db: Session = Depends(get_db)
+    request: ValidateLicenseRequest,
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
 ):
     """
     调试接口：解密并输出许可证 JSON 与关键校验结果。
+
+    仅在 DEBUG 模式开启且由管理员调用时可用，生产环境默认关闭。
     """
+    # 生产环境（DEBUG=False）下直接隐藏该接口
+    if not settings.DEBUG:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+
     app = (
         db.query(Application)
         .filter(Application.project_id == request.project_id)

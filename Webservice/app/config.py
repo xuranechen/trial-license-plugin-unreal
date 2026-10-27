@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     # Stripe支付配置
     STRIPE_SECRET_KEY: str = ""
     STRIPE_PUBLISHABLE_KEY: str = ""
+    # Stripe 异步回调签名密钥（Dashboard -> Webhooks -> whsec_...）
+    STRIPE_WEBHOOK_SECRET: str = ""
 
     # 支付宝支付配置
     ALIPAY_APP_ID: str = ""
